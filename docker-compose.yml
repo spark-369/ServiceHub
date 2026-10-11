@@ -4,9 +4,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:mysecretpassword@db:5432/home_service_discovery
+      # Inside Docker the DB/Redis hosts are the service names, not localhost.
+      DATABASE_URL: postgresql://postgres:mysecretpassword@db:5432/home_service_discovery?schema=public
+      DIRECT_URL: postgresql://postgres:mysecretpassword@db:5432/home_service_discovery?schema=public
+      REDIS_URL: redis://redis:6379
     depends_on:
       - db
+      - redis
 
   db:
     image: postgres:latest
@@ -16,3 +20,9 @@ services:
       POSTGRES_PASSWORD: mysecretpassword
     ports:
       - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+

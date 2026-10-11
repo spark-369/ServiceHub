@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { withAuth, withRole } from "@/middleware/auth";
+import prisma from "@/lib/db/prisma";
+import { withRole } from "@/middleware/auth";
 
 export const GET = async (request: NextRequest): Promise<NextResponse> => {
   try {
@@ -100,6 +100,7 @@ export const PUT = withRole(["provider"])(
         );
       }
 
+      const body = await request.json();
       const {
         name,
         description,
@@ -110,21 +111,32 @@ export const PUT = withRole(["provider"])(
         availability,
         tags,
         isActive,
-      } = await request.json();
+      } = body;
+
+      // Build a partial update so callers can send only the fields they change
+      // (previously every field was written unconditionally, so a partial body
+      // would wipe the omitted columns).
+      const data: Record<string, unknown> = {};
+      if (name !== undefined) data.name = name;
+      if (description !== undefined) data.description = description;
+      if (category !== undefined) data.category = category;
+      if (price !== undefined) data.price = price;
+      if (duration !== undefined) data.duration = duration;
+      if (location !== undefined) data.location = location;
+      if (availability !== undefined) data.availability = availability;
+      if (tags !== undefined) data.tags = tags;
+      if (isActive !== undefined) data.isActive = isActive;
+
+      if (Object.keys(data).length === 0) {
+        return NextResponse.json(
+          { error: "No valid fields to update" },
+          { status: 400 }
+        );
+      }
 
       const updatedService = await prisma.service.update({
         where: { id },
-        data: {
-          name,
-          description,
-          category,
-          price,
-          duration,
-          location,
-          availability,
-          tags,
-          isActive,
-        },
+        data,
       });
 
       return NextResponse.json({

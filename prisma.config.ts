@@ -3,11 +3,10 @@
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
 
+// Schema-first workflow: this project does NOT use migration files.
+// Apply schema changes with `npx prisma db push` (or `npm run db:push`).
 export default defineConfig({
   schema: "prisma/schema.prisma",
-  migrations: {
-    path: "prisma/migrations",
-  },
   engine: "classic",
   datasource: {
     url: env("DATABASE_URL"),

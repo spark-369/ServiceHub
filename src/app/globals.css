@@ -1,30 +1,380 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Dark, production-grade design tokens (slate + indigo). */
+  --background: #020617; /* slate-950 */
+  --surface: #0f172a; /* slate-900 */
+  --surface-2: #1e293b; /* slate-800 — elevated / hover */
+  --border: #1e293b; /* slate-800 */
+  --foreground: #e2e8f0; /* slate-200 */
+  --muted: #94a3b8; /* slate-400 */
+  --muted-2: #64748b; /* slate-500 */
+  --accent: #6366f1; /* indigo-500 */
+  --accent-hover: #818cf8; /* indigo-400 */
+  --ring: #6366f1; /* focus ring */
+
+  /* Status palette — single source of truth for status colours. Each pair is a
+     foreground tone used on a 10%-opacity tint of the same hue (see Badge). */
+  --success: #10b981; /* emerald-500 */
+  --warning: #f59e0b; /* amber-500  */
+  --danger: #ef4444; /* red-500    */
+  --info: #6366f1; /* indigo-500 */
+
+  /* Radius scale — one vocabulary for corner rounding across the app. */
+  --radius-sm: 0.375rem; /* 6px  */
+  --radius-md: 0.5rem; /* 8px  */
+  --radius-lg: 0.75rem; /* 12px */
+  --radius-xl: 1rem; /* 16px */
+
+  /* Tell the browser to render native controls (scrollbars, form widgets,
+     date pickers) in their dark variant. */
+  color-scheme: dark;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--background);
 }
 
 body {
   background: var(--background);
-  color: #000000 !important;
+  color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Native form controls should inherit the dark surface instead of the UA's
+   light default, which otherwise shows white inputs in Safari/Firefox. */
+input,
+select,
+textarea {
+  background-color: #0f172a; /* slate-900 */
+  color: #e2e8f0;
+}
+
+/* Dropdown option lists are rendered by the UA outside the <select>, so they
+   don't inherit the control's colours above. Style them explicitly so every
+   <option> is legible on the dark surface. */
+select option {
+  background-color: #0f172a; /* slate-900 */
+  color: #e2e8f0; /* slate-200 */
+  /* NOTE: a percentage `min-width` below is unreliable in Chromium — the popup
+     is sized once on first open from the widest option's content, ignoring the
+     percentage. For fixed/known widths, prefer an inline pixel min-width on the
+     <option> (e.g. style={{ minWidth: "160px" }}) so the list matches the select
+     on the very first open, not just on subsequent opens. */
+  min-width: 100%;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b; /* slate-500 */
+}
+
+/* Dark scrollbars to match the surface in WebKit/Blink browsers. */
 * {
-  color: #000000 !important;
+  scrollbar-color: #334155 #020617; /* slate-700 / slate-950 */
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #020617;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+  border: 2px solid #020617;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ---------------------------------------------------------------------------
+   Leaflet map
+   --------------------------------------------------------------------------- */
+
+/* Leaflet needs a non-zero-height container; provide a sane fallback in case
+   a parent's `h-full` resolves to 0. */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  background: #0f172a; /* slate-900 — matches the dark map chrome */
+  font-family: inherit;
+  /* Keep Leaflet's internal panes/controls below the app's modal layering. */
+  z-index: 0;
+}
+
+/* Zoom controls on a dark surface so they stay legible. (The attribution
+   control is disabled on the map itself; the rules below are a defensive
+   fallback in case it is ever re-enabled.) */
+.leaflet-container .leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.85);
+  color: #cbd5e1;
+}
+.leaflet-container .leaflet-control-attribution a {
+  color: #a5b4fc;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-bottom-color: #334155;
+}
+.leaflet-bar a:hover {
+  background-color: #334155;
+}
+
+/* Popups should follow the dark surface rather than Leaflet's white default. */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-content-wrapper {
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+}
+.leaflet-container a.leaflet-popup-close-button {
+  color: #94a3b8;
+}
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: #e2e8f0;
+}
+
+/* The SVG overlay (polylines/circles) must sit above the tile pane, and
+   markers/popups above that. Leaflet sets these via z-index internally; these
+   rules keep the order explicit so the distance line is never hidden. */
+.leaflet-container .leaflet-overlay-pane svg {
+  z-index: 400;
+}
+.leaflet-container .leaflet-marker-pane {
+  z-index: 600;
+}
+.leaflet-container .leaflet-tooltip-pane {
+  z-index: 650;
+}
+.leaflet-container .leaflet-popup-pane {
+  z-index: 700;
+}
+
+/* Round the zoom control to match the app's floating map buttons, and lift it
+   clear of the bottom status card. */
+.leaflet-container .leaflet-control-zoom {
+  border: 1px solid #334155; /* slate-700 */
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+.leaflet-container .leaflet-control-zoom a {
+  background-color: rgba(15, 23, 42, 0.95); /* slate-900 */
+  color: #e2e8f0;
+}
+.leaflet-container .leaflet-control-zoom a:hover {
+  background-color: #1e293b; /* slate-800 */
+}
+.leaflet-container .leaflet-control-zoom a:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+}
+
+/* Detailed marker tooltip — the click-to-open detail card shown above a pin.
+   Styled to match the dark surface (Leaflet's default tooltip is white). */
+.app-detail-tooltip.leaflet-tooltip {
+  background: rgba(15, 23, 42, 0.97); /* slate-900 */
+  color: #e2e8f0;
+  border: 1px solid #334155; /* slate-700 */
+  border-radius: 0.5rem;
+  padding: 8px 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  /* The tooltip is interactive, so it must receive pointer events (Leaflet's
+     default for non-interactive tooltips is `none`). Without this the links
+     inside it would be dead. */
+  pointer-events: auto;
+  /* Never let the card overflow the viewport on small screens. */
+  max-width: min(20rem, 90vw);
+}
+/* Recolour the tooltip arrow to match the dark background. */
+.app-detail-tooltip.leaflet-tooltip-top::before {
+  border-top-color: #334155;
+}
+.app-detail-tooltip.leaflet-tooltip-bottom::before {
+  border-bottom-color: #334155;
+}
+.app-detail-tooltip.leaflet-tooltip-left::before {
+  border-left-color: #334155;
+}
+.app-detail-tooltip.leaflet-tooltip-right::before {
+  border-right-color: #334155;
+}
+/* Keep links inside the tooltip legible and clickable. */
+.app-detail-tooltip a {
+  pointer-events: auto;
+}
+
+/* Distance badge rendered ON the connecting line between the two users.
+   It is a Leaflet tooltip bound to the polyline (so Leaflet keeps it glued to
+   the line on every pan/zoom and centres it via `direction="center"`). We strip
+   Leaflet's default white tooltip chrome and draw our own pill inside. */
+.distance-badge-tooltip.leaflet-tooltip {
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  /* Purely decorative — never intercept map drags/clicks. */
+  pointer-events: none;
+}
+/* No arrow for a centred badge. */
+.distance-badge-tooltip.leaflet-tooltip::before {
+  display: none;
+}
+.distance-badge-tooltip__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  background: #4f46e5;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.distance-badge-tooltip__pill svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+/* Custom SVG map pin (Leaflet DivIcon). The colour is set on the SVG itself,
+   so a small drop-shadow is all that's needed for legibility over tiles. */
+.app-map-pin {
+  background: transparent;
+  border: none;
+}
+.app-map-pin svg {
+  display: block;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}
+
+/* "You are here" pin: a gentle pulsing halo behind the teardrop signals a live,
+   continuously-updating position without being distracting. */
+.app-map-pin__halo {
+  transform-origin: 17px 17px;
+  animation: app-pin-pulse 2s ease-out infinite;
+}
+@keyframes app-pin-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* The live "You" pin lifts slightly above its sibling so the two pins never
+   fully hide each other when they sit close together. */
+.app-map-pin--live svg {
+  filter: drop-shadow(0 2px 4px rgba(67, 56, 202, 0.55));
+}
+
+/* ---------------------------------------------------------------------------
+   Leaflet — dark basemap via CSS filter
+   ---------------------------------------------------------------------------
+   The tiles are the standard (key-free) OSM street tiles; we invert + hue-rotate
+   them to produce a dark basemap that matches the app, without depending on a
+   keyed tile provider. The filter is applied ONLY to the tile pane so our SVG
+   pins, accuracy rings, route line and tooltips keep their true colours. */
+.app-map-dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)
+    saturate(0.75);
+}
+
+/* ---------------------------------------------------------------------------
+   Leaflet — light ("streets") basemap adjustments
+   ---------------------------------------------------------------------------
+   When the user switches to the OSM street tiles the dark chrome (attribution,
+   zoom, tooltips) would clash, so we lighten just those controls while leaving
+   the app's own overlays dark. */
+.app-map-light .leaflet-control-attribution,
+.app-map-light .leaflet-bar a,
+.app-map-light .leaflet-bar a:hover {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+.app-map-light .leaflet-control-attribution a {
+  color: #4338ca;
+}
+.app-map-light .leaflet-control-zoom a {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+}
+.app-map-light .leaflet-control-zoom a:hover {
+  background-color: #e2e8f0;
+}
+
+/* Tooltips fade in rather than snapping, mirroring the app's motion language.
+   IMPORTANT: only `opacity` is animated. Leaflet positions a tooltip with an
+   inline `transform`, so animating `transform` here would fight Leaflet's own
+   positioning (the card would jump during the animation). Guarded so it plays
+   instantly for reduced-motion users. */
+.app-detail-tooltip.leaflet-tooltip {
+  animation: app-tooltip-in 140ms ease-out;
+}
+@keyframes app-tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-map-pin__halo,
+  .app-detail-tooltip.leaflet-tooltip {
+    animation: none;
+  }
 }

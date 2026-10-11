@@ -19,8 +19,70 @@ spec:
           ports:
             - containerPort: 3000
           env:
+            - name: NODE_ENV
+              value: "production"
             - name: DATABASE_URL
               value: "postgresql://postgres:postgres@postgres:5432/mydb"
+            - name: DIRECT_URL
+              value: "postgresql://postgres:postgres@postgres:5432/mydb"
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+            # Secrets should be provided via a Secret, not inline values:
+            #   kubectl create secret generic homely-secrets \
+            #     --from-literal=JWT_SECRET=... \
+            #     --from-literal=STRIPE_SECRET_KEY=... \
+            #     --from-literal=NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=... \
+            #     --from-literal=STRIPE_WEBHOOK_SECRET=...
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: homely-secrets
+                  key: JWT_SECRET
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: homely-secrets
+                  key: STRIPE_SECRET_KEY
+            - name: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: homely-secrets
+                  key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: homely-secrets
+                  key: STRIPE_WEBHOOK_SECRET
+          # Liveness: restart the container if the process is unhealthy.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: stop routing traffic until the DB is reachable.
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Allow in-flight requests to finish during rolling updates.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
 
 ---
 apiVersion: apps/v1
@@ -28,7 +90,7 @@ kind: Deployment
 metadata:
   name: postgres-deployment
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: postgres
@@ -49,3 +111,9 @@ spec:
               value: postgres
             - name: POSTGRES_DB
               value: mydb
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          emptyDir: {}

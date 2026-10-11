@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { Button, Field, Input, Select } from "@/components/ui";
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -12,7 +13,7 @@ export default function RegisterPage() {
     password: "",
     phone: "",
     address: "",
-    role: "user",
+    role: "customer",
   });
   const [error, setError] = useState("");
   const { register, loading } = useAuth();
@@ -43,130 +44,152 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+    <div className="flex items-center justify-center py-12">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl md:grid-cols-2">
+        {/* Branding panel (desktop only) */}
+        <div className="hidden flex-col justify-between bg-gradient-to-br from-indigo-950/70 to-slate-900 p-8 md:flex">
+          <div>
+            <p className="bg-gradient-to-r from-indigo-400 to-sky-400 bg-clip-text text-2xl font-bold text-transparent">
+              ServiceHub
+            </p>
+            <h1 className="mt-6 text-2xl font-bold text-slate-100">
+              Join ServiceHub
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Create a free account to book services, or sign up as a provider
+              to list your own and reach new customers.
+            </p>
+          </div>
+          <ul className="space-y-3 text-sm text-slate-400">
+            <li className="flex items-center gap-2">
+              <svg className="h-4 w-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Book and pay securely
+            </li>
+            <li className="flex items-center gap-2">
+              <svg className="h-4 w-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Providers: list &amp; manage services
+            </li>
+            <li className="flex items-center gap-2">
+              <svg className="h-4 w-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Track bookings in real time
+            </li>
+          </ul>
+        </div>
+
+        {/* Form */}
+        <div className="p-8">
+          <div className="md:hidden">
+            <p className="bg-gradient-to-r from-indigo-400 to-sky-400 bg-clip-text text-xl font-bold text-transparent">
+              ServiceHub
+            </p>
+          </div>
+          <h2 className="mt-4 text-2xl font-extrabold text-slate-100 md:mt-0">
             Create your account
           </h2>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="name" className="sr-only">
-                Full Name
-              </label>
-              <input
+          <p className="mt-2 text-sm text-slate-400">
+            Fill in your details to get started.
+          </p>
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
+                {error}
+              </div>
+            )}
+            <Field label="Full Name" htmlFor="name" required>
+              <Input
                 id="name"
                 name="name"
                 type="text"
+                autoComplete="name"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Full Name"
+                placeholder="Jane Doe"
                 value={formData.name}
                 onChange={handleChange}
               />
-            </div>
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
+            </Field>
+            <Field label="Email address" htmlFor="email" required>
+              <Input
                 id="email"
                 name="email"
                 type="email"
+                autoComplete="email"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
+                placeholder="you@example.com"
                 value={formData.email}
                 onChange={handleChange}
               />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
+            </Field>
+            <Field label="Password" htmlFor="password" required>
+              <Input
                 id="password"
                 name="password"
                 type="password"
+                autoComplete="new-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
+                placeholder="••••••••"
                 value={formData.password}
                 onChange={handleChange}
               />
-            </div>
-            <div>
-              <label htmlFor="phone" className="sr-only">
-                Phone
-              </label>
-              <input
+            </Field>
+            <Field label="Phone" htmlFor="phone" hint="Optional">
+              <Input
                 id="phone"
                 name="phone"
                 type="tel"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Phone (optional)"
+                autoComplete="tel"
+                placeholder="+1 555 000 0000"
                 value={formData.phone}
                 onChange={handleChange}
               />
-            </div>
-            <div>
-              <label htmlFor="address" className="sr-only">
-                Address
-              </label>
-              <input
+            </Field>
+            <Field label="Address" htmlFor="address" hint="Optional">
+              <Input
                 id="address"
                 name="address"
                 type="text"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Address (optional)"
+                autoComplete="street-address"
+                placeholder="123 Main St"
                 value={formData.address}
                 onChange={handleChange}
               />
-            </div>
-            <div>
-              <label htmlFor="role" className="sr-only">
-                Role
-              </label>
-              <select
+            </Field>
+            <Field
+              label="Account type"
+              htmlFor="role"
+              hint="Providers can also list their own services"
+            >
+              <Select
                 id="role"
                 name="role"
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 value={formData.role}
                 onChange={handleChange}
               >
-                <option value="user">Customer</option>
-                <option value="provider">Service Provider</option>
-                <option value="admin">Administrator</option>
-              </select>
+                <option value="customer" className="bg-slate-900 text-slate-100" style={{ minWidth: "320px" }}>Customer</option>
+                <option value="provider" className="bg-slate-900 text-slate-100" style={{ minWidth: "320px" }}>Service Provider</option>
+                <option value="admin" className="bg-slate-900 text-slate-100" style={{ minWidth: "320px" }}>Administrator</option>
+              </Select>
+            </Field>
+
+            <Button type="submit" loading={loading} className="w-full">
+              Create account
+            </Button>
+
+            <div className="text-center">
+              <Link
+                href="/auth/login"
+                className="font-medium text-indigo-400 hover:text-indigo-300"
+              >
+                Already have an account? Sign in
+              </Link>
             </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {loading ? "Creating account..." : "Create account"}
-            </button>
-          </div>
-
-          <div className="text-center space-y-2">
-            <Link
-              href="/auth/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Already have an account? Sign in
-            </Link>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,18 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
+import {
+  Avatar,
+  Button,
+  ButtonLink,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  Field,
+  Textarea,
+} from "@/components/ui";
 
 interface Booking {
   id: string;
@@ -14,7 +26,61 @@ interface Booking {
   };
   provider: {
     name: string;
-  };
+  } | null;
+}
+
+/** Human-friendly descriptors shown next to the selected rating. */
+const RATING_LABELS: Record<number, string> = {
+  1: "Poor",
+  2: "Fair",
+  3: "Good",
+  4: "Very good",
+  5: "Excellent",
+};
+
+/** Interactive star input. Hovered state highlights up to the cursor, keyboard
+ *  works via the arrow keys on the focused first star. */
+function StarRatingInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  const [hovered, setHovered] = useState(0);
+  const active = hovered || value;
+
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => onChange(star)}
+          onMouseEnter={() => setHovered(star)}
+          onMouseLeave={() => setHovered(0)}
+          onFocus={() => setHovered(star)}
+          onBlur={() => setHovered(0)}
+          aria-label={`Rate ${star} out of 5 stars`}
+          aria-pressed={value === star}
+          className="group rounded-md p-0.5 transition-transform duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 hover:scale-110 active:scale-95"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+            className={`h-8 w-8 transition-colors duration-100 ${
+              star <= active
+                ? "text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.35)]"
+                : "text-slate-700 group-hover:text-slate-600"
+            }`}
+          >
+            <path d="M10 1.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L10 14.77l-5.2 2.73.99-5.78-4.21-4.1 5.82-.85L10 1.5z" />
+          </svg>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export default function ReviewPage() {
@@ -29,6 +95,7 @@ export default function ReviewPage() {
   const bookingId = params.bookingId as string;
   const { user } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   useEffect(() => {
     if (bookingId && user) {
@@ -83,8 +150,8 @@ export default function ReviewPage() {
       });
       const data = await response.json();
       if (response.ok) {
-        alert("Review submitted successfully!");
-        router.push("/dashboard/bookings");
+        toast.success("Review submitted successfully!");
+        router.push("/bookings");
       } else {
         setError(data.error || "Failed to submit review");
       }
@@ -99,7 +166,7 @@ export default function ReviewPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
@@ -108,12 +175,12 @@ export default function ReviewPage() {
   if (!serviceId || !bookingId) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">
+        <p className="text-red-400">
           Invalid review URL. Missing required parameters.
         </p>
         <Link
-          href="/dashboard/bookings"
-          className="text-indigo-600 hover:text-indigo-500 mt-4 inline-block"
+          href="/bookings"
+          className="text-indigo-400 hover:text-indigo-300 mt-4 inline-block"
         >
           Back to bookings
         </Link>
@@ -123,13 +190,13 @@ export default function ReviewPage() {
 
   if (error || !booking) {
     return (
-      <div className="flex items-center justify-center h-[80vh] bg-gray-50 px-4">
-        <div className="bg-green-300 shadow-lg rounded-lg p-8 max-w-md w-full text-center">
-          <p className="text-yellow-500 text-lg font-semibold mb-4">
+      <div className="flex items-center justify-center h-[80vh] px-4">
+        <div className="bg-slate-900 border border-slate-800 shadow-lg rounded-lg p-8 max-w-md w-full text-center">
+          <p className="text-amber-400 text-lg font-semibold mb-4">
             {error || "Booking not found"}
           </p>
           <Link
-            href="/dashboard/bookings"
+            href="/bookings"
             className="inline-block mt-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded hover:bg-indigo-500 transition-colors duration-200"
           >
             Back to bookings
@@ -142,10 +209,10 @@ export default function ReviewPage() {
   if (booking.status !== "completed") {
     return (
       <div className="text-center py-12">
-        <p className="text-red-600">You can only review completed bookings</p>
+        <p className="text-red-400">You can only review completed bookings</p>
         <Link
-          href="/dashboard/bookings"
-          className="text-indigo-600 hover:text-indigo-500 mt-4 inline-block"
+          href="/bookings"
+          className="text-indigo-400 hover:text-indigo-300 mt-4 inline-block"
         >
           Back to bookings
         </Link>
@@ -154,87 +221,90 @@ export default function ReviewPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
-          Leave a Review
-        </h1>
+    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Leave a Review"
+          description="Your feedback helps your neighbours find reliable service providers."
+        />
 
-        {/* Service Info */}
-        <div className="bg-gray-50 rounded-lg p-4 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {booking.service.name}
-          </h2>
-          <p className="text-gray-600">Provided by {booking.provider.name}</p>
-        </div>
+        <CardBody className="space-y-8">
+          {/* Service info */}
+          <div className="flex items-center gap-4 rounded-lg border border-slate-800 bg-slate-800/40 p-4">
+            <Avatar name={booking.service.name} size="lg" />
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold text-slate-100">
+                {booking.service.name}
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-slate-400">
+                Provided by {booking.provider?.name ?? "Unknown provider"}
+              </p>
+            </div>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            <div
+              role="alert"
+              className="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+            >
               {error}
             </div>
           )}
 
-          {/* Rating */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Rating
-            </label>
-            <div className="flex items-center space-x-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => setRating(star)}
-                  className={`text-2xl ${
-                    star <= rating ? "text-yellow-400" : "text-gray-300"
-                  } hover:text-yellow-400 transition-colors`}
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Rating */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label
+                  id="rating-label"
+                  className="text-sm font-medium text-slate-300"
                 >
-                  ★
-                </button>
-              ))}
-              <span className="ml-2 text-sm text-gray-600">
+                  Rating
+                </label>
+                <span className="text-sm font-semibold text-amber-400">
+                  {RATING_LABELS[rating]}
+                </span>
+              </div>
+              <div
+                className="mt-2"
+                role="radiogroup"
+                aria-labelledby="rating-label"
+                aria-label="Rating"
+              >
+                <StarRatingInput value={rating} onChange={setRating} />
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
                 {rating} out of 5 stars
-              </span>
+              </p>
             </div>
-          </div>
 
-          {/* Comment */}
-          <div>
-            <label
+            {/* Comment */}
+            <Field
               htmlFor="comment"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              label="Your Review"
+              hint={`${comment.length}/2000 characters`}
             >
-              Your Review (optional)
-            </label>
-            <textarea
-              id="comment"
-              rows={4}
-              className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Share your experience with this service..."
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
-          </div>
+              <Textarea
+                id="comment"
+                rows={5}
+                maxLength={2000}
+                placeholder="Share your experience — what went well, and what could be improved..."
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+            </Field>
 
-          {/* Submit Button */}
-          <div className="flex justify-end space-x-3">
-            <Link
-              href="/dashboard/bookings"
-              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {submitting ? "Submitting..." : "Submit Review"}
-            </button>
-          </div>
-        </form>
-      </div>
+            <CardFooter className="-mx-6 -mb-6 bg-slate-800/20">
+              <ButtonLink href="/bookings" variant="secondary">
+                Cancel
+              </ButtonLink>
+              <Button type="submit" loading={submitting}>
+                {submitting ? "Submitting..." : "Submit Review"}
+              </Button>
+            </CardFooter>
+          </form>
+        </CardBody>
+      </Card>
     </div>
   );
 }

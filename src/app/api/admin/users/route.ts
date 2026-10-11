@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/db/prisma';
+import { parsePagination, paginationMeta } from '@/lib/api/pagination';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,12 +11,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const role = searchParams.get('role') || '';
-
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(searchParams);
 
     const where: any = {};
     if (search) {
@@ -58,12 +56,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       users,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      pagination: paginationMeta(page, limit, total),
     });
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -81,15 +74,43 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { userId, updates } = await request.json();
+    const body = await request.json();
+    const userId = body.userId;
+    const updates = (body.updates ?? body) as Record<string, any>;
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
+    // Whitelist updatable fields — never let a caller change the id, password
+    // hash, or createdAt through this endpoint.
+    const allowed: Record<string, unknown> = {};
+    if (typeof updates === 'object' && updates !== null) {
+      if (updates.name !== undefined) allowed.name = updates.name;
+      if (updates.email !== undefined) allowed.email = updates.email;
+      if (updates.phone !== undefined) allowed.phone = updates.phone;
+      if (updates.address !== undefined) allowed.address = updates.address;
+      if (updates.role !== undefined) {
+        if (!['customer', 'provider', 'admin'].includes(updates.role)) {
+          return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+        }
+        allowed.role = updates.role;
+      }
+      if (updates.isVerified !== undefined) {
+        allowed.isVerified = Boolean(updates.isVerified);
+      }
+    }
+
+    if (Object.keys(allowed).length === 0) {
+      return NextResponse.json(
+        { error: 'No valid fields to update' },
+        { status: 400 }
+      );
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: updates,
+      data: allowed,
       select: {
         id: true,
         name: true,

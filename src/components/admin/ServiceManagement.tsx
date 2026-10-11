@@ -18,7 +18,7 @@ interface Service {
     id: string;
     name: string;
     email: string;
-  };
+  } | null;
   _count: {
     bookings: number;
     reviews: number;
@@ -140,7 +140,7 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
   if (loading && services.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
@@ -150,8 +150,8 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
       {/* Header and Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Service Management</h3>
-          <p className="mt-1 text-sm text-gray-600">
+          <h3 className="text-lg leading-6 font-medium text-slate-100">Service Management</h3>
+          <p className="mt-1 text-sm text-slate-400">
             Manage service listings, categories, and provider offerings
           </p>
         </div>
@@ -161,16 +161,16 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
             placeholder="Search services..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="px-3 py-2 border border-slate-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="bg-slate-900 text-slate-100 px-3 py-2 border border-slate-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-44"
           >
-            <option value="">All Categories</option>
+            <option value="" className="bg-slate-900 text-slate-100" style={{ minWidth: "176px" }}>All Categories</option>
             {categories.map((category) => (
-              <option key={category} value={category}>
+              <option key={category} value={category} className="bg-slate-900 text-slate-100" style={{ minWidth: "176px" }}>
                 {category}
               </option>
             ))}
@@ -178,66 +178,66 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="bg-slate-900 text-slate-100 px-3 py-2 border border-slate-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-40"
           >
-            <option value="">All Status</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
+            <option value="" className="bg-slate-900 text-slate-100" style={{ minWidth: "160px" }}>All Status</option>
+            <option value="true" className="bg-slate-900 text-slate-100" style={{ minWidth: "160px" }}>Active</option>
+            <option value="false" className="bg-slate-900 text-slate-100" style={{ minWidth: "160px" }}>Inactive</option>
           </select>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="text-red-800 text-sm">{error}</div>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-4">
+          <div className="text-red-300 text-sm">{error}</div>
         </div>
       )}
 
       {/* Services Table */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
+      <div className="bg-slate-900 border border-slate-800 shadow overflow-hidden sm:rounded-md">
+        <ul className="divide-y divide-slate-800">
           {services.map((service) => (
             <li key={service.id} className="px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900 truncate">
+                      <h3 className="text-lg font-medium text-slate-100 truncate">
                         {service.name}
                       </h3>
-                      <p className="text-sm text-gray-600 mt-1">{service.description}</p>
-                      <div className="mt-1 text-sm text-gray-500">
+                      <p className="text-sm text-slate-400 mt-1">{service.description}</p>
+                      <div className="mt-1 text-sm text-slate-500">
                         Category: {service.category} • Location: {service.location}
                       </div>
                     </div>
                     <div className="text-right ml-4">
-                      <div className="text-lg font-semibold text-gray-900">
+                      <div className="text-lg font-semibold text-slate-100">
                         ${service.price}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-slate-500">
                         Duration: {service.duration} min
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-slate-500">
                         ⭐ {service.rating.toFixed(1)} ({service.reviewCount})
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-2 flex items-center space-x-4 text-sm text-gray-600">
-                    <span>👤 {service.provider.name}</span>
+                  <div className="mt-2 flex items-center space-x-4 text-sm text-slate-400">
+                    <span>👤 {service.provider?.name ?? "Unknown provider"}</span>
                     <span>📊 Bookings: {service._count.bookings}</span>
                     <span>💬 Reviews: {service._count.reviews}</span>
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${
                         service.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                          ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20'
+                          : 'bg-red-500/10 text-red-300 ring-red-500/20'
                       }`}
                     >
                       {service.isActive ? 'Active' : 'Inactive'}
                     </span>
                     {service._count.bookings > 0 && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 ring-1 ring-inset ring-amber-500/20">
                         ⚠️ Has Bookings
                       </span>
                     )}
@@ -248,7 +248,7 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
               <div className="mt-4 flex space-x-2">
                 <button
                   onClick={() => setEditingService(service)}
-                  className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                  className="inline-flex items-center px-3 py-1 border border-slate-700 text-sm font-medium rounded-md text-indigo-300 bg-slate-800 hover:bg-indigo-500/10"
                 >
                   Edit
                 </button>
@@ -256,8 +256,8 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
                   onClick={() => toggleServiceStatus(service.id, service.isActive)}
                   className={`inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white ${
                     service.isActive
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-green-600 hover:bg-green-700'
+                      ? 'bg-red-600 hover:bg-red-500'
+                      : 'bg-emerald-600 hover:bg-emerald-500'
                   }`}
                 >
                   {service.isActive ? 'Deactivate' : 'Activate'}
@@ -265,10 +265,10 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
                 <button
                   onClick={() => handleDeleteService(service.id)}
                   disabled={service._count.bookings > 0}
-                  className={`inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md ${
+                  className={`inline-flex items-center px-3 py-1 border text-sm font-medium rounded-md ${
                     service._count.bookings > 0
-                      ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                      : 'text-red-700 bg-red-100 hover:bg-red-200'
+                      ? 'text-slate-500 border-slate-800 bg-slate-800/50 cursor-not-allowed'
+                      : 'text-red-300 border-red-500/30 bg-slate-800 hover:bg-red-500/10'
                   }`}
                   title={service._count.bookings > 0 ? 'Cannot delete service with existing bookings' : 'Delete service'}
                 >
@@ -280,7 +280,7 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
         </ul>
 
         {services.length === 0 && !loading && (
-          <div className="px-6 py-8 text-center text-gray-500">
+          <div className="px-6 py-8 text-center text-slate-400">
             No services found
           </div>
         )}
@@ -289,7 +289,7 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
       {/* Pagination */}
       {pagination.pages > 1 && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-slate-400">
             Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
             {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
           </div>
@@ -297,17 +297,17 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border border-slate-700 rounded-md text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-800"
             >
               Previous
             </button>
-            <span className="px-3 py-2 text-sm">
+            <span className="px-3 py-2 text-sm text-slate-300">
               Page {currentPage} of {pagination.pages}
             </span>
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === pagination.pages}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border border-slate-700 rounded-md text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-800"
             >
               Next
             </button>
@@ -317,9 +317,9 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
 
       {/* Edit Service Modal */}
       {editingService && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-screen overflow-y-auto">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Service</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 w-full max-w-md max-h-screen overflow-y-auto">
+            <h3 className="text-lg font-medium text-slate-100 mb-4">Edit Service</h3>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -338,81 +338,81 @@ export default function ServiceManagement({ onDataChange }: ServiceManagementPro
               className="space-y-4"
             >
               <div>
-                <label className="block text-sm font-medium text-gray-700">Name</label>
+                <label className="block text-sm font-medium text-slate-300">Name</label>
                 <input
                   name="name"
                   defaultValue={editingService.name}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <label className="block text-sm font-medium text-slate-300">Description</label>
                 <textarea
                   name="description"
                   defaultValue={editingService.description}
                   rows={3}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
+                <label className="block text-sm font-medium text-slate-300">Category</label>
                 <input
                   name="category"
                   defaultValue={editingService.category}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Price ($)</label>
+                  <label className="block text-sm font-medium text-slate-300">Price ($)</label>
                   <input
                     name="price"
                     type="number"
                     step="0.01"
                     defaultValue={editingService.price}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="mt-1 block w-full border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Duration (min)</label>
+                  <label className="block text-sm font-medium text-slate-300">Duration (min)</label>
                   <input
                     name="duration"
                     type="number"
                     defaultValue={editingService.duration}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="mt-1 block w-full border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Location</label>
+                <label className="block text-sm font-medium text-slate-300">Location</label>
                 <input
                   name="location"
                   defaultValue={editingService.location}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Status</label>
+                <label className="block text-sm font-medium text-slate-300">Status</label>
                 <select
                   name="isActive"
                   defaultValue={editingService.isActive.toString()}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full bg-slate-900 text-slate-100 border border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 >
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
+                  <option value="true" className="bg-slate-900 text-slate-100" style={{ minWidth: "400px" }}>Active</option>
+                  <option value="false" className="bg-slate-900 text-slate-100" style={{ minWidth: "400px" }}>Inactive</option>
                 </select>
               </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setEditingService(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                  className="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-md"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-md"
                 >
                   Save Changes
                 </button>

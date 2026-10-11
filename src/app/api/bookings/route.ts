@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/db/prisma";
 import { withAuth } from "@/middleware/auth";
+import { parsePagination, paginationMeta } from "@/lib/api/pagination";
 
 export const GET = withAuth(async (request: NextRequest, user: any) => {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(searchParams);
 
     let where: any = {};
 
-    if (user.role === "user") {
+    if (user.role === "customer" || user.role === "user") {
       where.userId = user.userId;
     } else if (user.role === "provider") {
       where.providerId = user.userId;
@@ -67,6 +65,10 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
         notes: booking.notes,
         totalPrice: booking.totalPrice,
         paymentStatus: booking.paymentStatus,
+        paidAt: booking.paidAt,
+        refundedAt: booking.refundedAt,
+        stripePaymentId: booking.stripePaymentId,
+        stripeCustomerId: booking.stripeCustomerId,
         service: {
           id: booking.service.id,
           name: booking.service.name,
@@ -75,31 +77,26 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
           duration: booking.service.duration,
         },
         user:
-          user.role === "provider"
-            ? {
+          user.role === "customer" || user.role === "user"
+            ? undefined
+            : {
                 id: booking.user.id,
                 name: booking.user.name,
                 email: booking.user.email,
                 phone: booking.user.phone,
-              }
-            : undefined,
+              },
         provider:
-          user.role === "user"
-            ? {
+          user.role === "provider"
+            ? undefined
+            : {
                 id: booking.provider.id,
                 name: booking.provider.name,
                 email: booking.provider.email,
                 phone: booking.provider.phone,
-              }
-            : undefined,
+              },
         createdAt: booking.createdAt,
       })),
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      pagination: paginationMeta(page, limit, total),
     });
   } catch (error) {
     console.error("Bookings list error:", error);
@@ -118,6 +115,23 @@ export const POST = withAuth(async (request: NextRequest, user: any) => {
     if (!serviceId || !date) {
       return NextResponse.json(
         { error: "Service ID and date are required" },
+        { status: 400 },
+      );
+    }
+
+    const parsedDate = new Date(date);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return NextResponse.json(
+        { error: "Invalid date" },
+        { status: 400 },
+      );
+    }
+
+    // Bookings must be for a (roughly) future point in time. A small grace
+    // window avoids rejecting a request that races with the clock.
+    if (parsedDate.getTime() < Date.now() - 60 * 1000) {
+      return NextResponse.json(
+        { error: "Booking date must be in the future" },
         { status: 400 },
       );
     }
@@ -141,11 +155,11 @@ export const POST = withAuth(async (request: NextRequest, user: any) => {
       );
     }
 
-    // Check for conflicting bookings
+    // Check for conflicting bookings for the same service at the same time.
     const conflictingBooking = await prisma.booking.findFirst({
       where: {
         serviceId: serviceId,
-        date: new Date(date),
+        date: parsedDate,
         status: {
           in: ["pending", "confirmed", "in_progress"],
         },
@@ -165,7 +179,7 @@ export const POST = withAuth(async (request: NextRequest, user: any) => {
         userId: user.userId,
         serviceId: serviceId,
         providerId: service.providerId,
-        date: new Date(date),
+        date: parsedDate,
         notes,
         totalPrice: service.price,
       },

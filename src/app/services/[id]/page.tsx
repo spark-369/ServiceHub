@@ -4,41 +4,11 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-
-interface Service {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  price: number;
-  duration: number;
-  location: string;
-  availability: {
-    days: string[];
-    startTime: string;
-    endTime: string;
-  };
-  tags: string[];
-  rating: number;
-  reviewCount: number;
-  provider: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-  };
-}
-
-interface Review {
-  id: string;
-  rating: number;
-  comment?: string;
-  user: {
-    name: string;
-  };
-  createdAt: string;
-}
+import { useToast } from "@/context/ToastContext";
+import { Badge, Button, ButtonLink, Field, Input, Rating, Textarea } from "@/components/ui";
+import { SpinnerPanel } from "@/components/ui/Spinner";
+import { formatDate, formatDuration, formatMoney } from "@/lib/format";
+import type { Review, Service } from "@/lib/types";
 
 export default function ServiceDetailPage() {
   const [service, setService] = useState<Service | null>(null);
@@ -51,6 +21,7 @@ export default function ServiceDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   useEffect(() => {
     if (id) {
@@ -99,10 +70,11 @@ export default function ServiceDetailPage() {
       });
       const data = await response.json();
       if (response.ok) {
-        alert("Booking created successfully!");
-        router.push("/dashboard/bookings");
+        toast.success("Booking created successfully!");
+        router.push("/bookings");
       } else {
         setError(data.error);
+        toast.error(data.error || "Failed to create booking");
       }
     } catch (error) {
       console.error("Error creating booking:", error);
@@ -113,20 +85,16 @@ export default function ServiceDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
+    return <SpinnerPanel label="Loading service" />;
   }
 
   if (error || !service) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600">{error || "Service not found"}</p>
+      <div className="py-12 text-center">
+        <p className="text-red-400">{error || "Service not found"}</p>
         <Link
           href="/"
-          className="text-indigo-600 hover:text-indigo-500 mt-4 inline-block"
+          className="mt-4 inline-block text-indigo-400 hover:text-indigo-300"
         >
           Back to services
         </Link>
@@ -137,29 +105,22 @@ export default function ServiceDetailPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
       {/* Service Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+      <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-sm p-6 mb-6">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900">{service.name}</h1>
-            <p className="text-lg text-gray-600 mt-2">{service.description}</p>
-            <div className="flex items-center mt-4 space-x-4">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                {service.category}
-              </span>
-              <div className="flex items-center">
-                <span className="text-yellow-400">⭐</span>
-                <span className="ml-1 text-sm text-gray-600">
-                  {service.rating.toFixed(1)} ({service.reviewCount} reviews)
-                </span>
-              </div>
+            <h1 className="text-3xl font-bold text-slate-100">{service.name}</h1>
+            <p className="mt-2 text-lg text-slate-400">{service.description}</p>
+            <div className="mt-4 flex items-center gap-4">
+              <Badge tone="info">{service.category}</Badge>
+              <Rating value={service.rating} count={service.reviewCount} />
             </div>
           </div>
           <div className="text-right">
-            <div className="text-3xl font-bold text-gray-900">
-              ${service.price}
+            <div className="text-3xl font-bold text-slate-100">
+              {formatMoney(service.price)}
             </div>
-            <div className="text-sm text-gray-500">
-              {service.duration} minutes
+            <div className="text-sm text-slate-500">
+              {formatDuration(service.duration)}
             </div>
           </div>
         </div>
@@ -169,54 +130,70 @@ export default function ServiceDetailPage() {
         {/* Service Details */}
         <div className="lg:col-span-2 space-y-6">
           {/* Provider Info */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-slate-100 mb-4">
               Service Provider
             </h2>
-            <div className="space-y-2">
-              <p>
-                <strong>Name:</strong> {service.provider.name}
+            {service.provider ? (
+              <div className="space-y-2 text-slate-300">
+                <p>
+                  <strong className="text-slate-200">Name:</strong>{" "}
+                  {service.provider.name}
+                </p>
+                <p>
+                  <strong className="text-slate-200">Email:</strong>{" "}
+                  {service.provider.email || "—"}
+                </p>
+                <p>
+                  <strong className="text-slate-200">Phone:</strong>{" "}
+                  {service.provider.phone || "—"}
+                </p>
+                <p>
+                  <strong className="text-slate-200">Address:</strong>{" "}
+                  {service.provider.address || "—"}
+                </p>
+              </div>
+            ) : (
+              <p className="text-slate-400">
+                Provider details are not available for this listing.
               </p>
-              <p>
-                <strong>Email:</strong> {service.provider.email}
-              </p>
-              <p>
-                <strong>Phone:</strong> {service.provider.phone}
-              </p>
-              <p>
-                <strong>Address:</strong> {service.provider.address}
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Availability */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-slate-100 mb-4">
               Availability
             </h2>
-            <div className="space-y-2">
+            <div className="space-y-2 text-slate-300">
               <p>
-                <strong>Days:</strong> {service.availability.days.join(", ")}
+                <strong className="text-slate-200">Days:</strong>{" "}
+                {service.availability?.days?.length
+                  ? service.availability.days.join(", ")
+                  : "—"}
               </p>
               <p>
-                <strong>Hours:</strong> {service.availability.startTime} -{" "}
-                {service.availability.endTime}
+                <strong className="text-slate-200">Hours:</strong>{" "}
+                {service.availability?.startTime && service.availability?.endTime
+                  ? `${service.availability.startTime} - ${service.availability.endTime}`
+                  : "—"}
               </p>
               <p>
-                <strong>Location:</strong> {service.location}
+                <strong className="text-slate-200">Location:</strong>{" "}
+                {service.location}
               </p>
             </div>
           </div>
 
           {/* Tags */}
-          {service.tags.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Tags</h2>
+          {service.tags && service.tags.length > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold text-slate-100 mb-4">Tags</h2>
               <div className="flex flex-wrap gap-2">
                 {service.tags.map((tag, index) => (
                   <span
                     key={index}
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 ring-1 ring-inset ring-slate-700"
                   >
                     {tag}
                   </span>
@@ -226,35 +203,32 @@ export default function ServiceDetailPage() {
           )}
 
           {/* Reviews */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-slate-100 mb-4">
               Reviews ({reviews.length})
             </h2>
             {reviews.length === 0 ? (
-              <p className="text-gray-500">No reviews yet.</p>
+              <p className="text-slate-400">No reviews yet.</p>
             ) : (
               <div className="space-y-4">
                 {reviews.map((review) => (
                   <div
                     key={review.id}
-                    className="border-b border-gray-200 pb-4 last:border-b-0"
+                    className="border-b border-slate-800 pb-4 last:border-b-0"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className="text-yellow-400">⭐</span>
-                        <span className="ml-1 font-medium">
-                          {review.rating}/5
-                        </span>
-                        <span className="ml-2 text-sm text-gray-600">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Rating value={review.rating} />
+                        <span className="text-sm text-slate-400">
                           by {review.user.name}
                         </span>
                       </div>
-                      <span className="text-sm text-gray-500">
-                        {new Date(review.createdAt).toLocaleDateString()}
+                      <span className="text-sm text-slate-500">
+                        {formatDate(review.createdAt)}
                       </span>
                     </div>
                     {review.comment && (
-                      <p className="mt-2 text-gray-700">{review.comment}</p>
+                      <p className="mt-2 text-slate-300">{review.comment}</p>
                     )}
                   </div>
                 ))}
@@ -265,69 +239,50 @@ export default function ServiceDetailPage() {
 
         {/* Booking Form */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-sm p-6 sticky top-24">
+            <h2 className="text-xl font-semibold text-slate-100 mb-4">
               Book This Service
             </h2>
             {user ? (
               <form onSubmit={handleBooking} className="space-y-4">
                 {error && (
-                  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded">
                     {error}
                   </div>
                 )}
-                <div>
-                  <label
-                    htmlFor="date"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    Select Date & Time
-                  </label>
-                  <input
+                <Field label="Select Date & Time" htmlFor="date" required>
+                  <Input
                     type="datetime-local"
                     id="date"
                     required
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     value={bookingDate}
                     onChange={(e) => setBookingDate(e.target.value)}
                     min={new Date().toISOString().slice(0, 16)}
                   />
-                </div>
-                <div>
-                  <label
-                    htmlFor="notes"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    Notes (optional)
-                  </label>
-                  <textarea
+                </Field>
+                <Field label="Notes" htmlFor="notes" hint="Optional">
+                  <Textarea
                     id="notes"
                     rows={3}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     placeholder="Any special instructions..."
                     value={bookingNotes}
                     onChange={(e) => setBookingNotes(e.target.value)}
                   />
-                </div>
-                <button
+                </Field>
+                <Button
                   type="submit"
-                  disabled={bookingLoading}
-                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  loading={bookingLoading}
+                  className="w-full"
                 >
-                  {bookingLoading ? "Booking..." : "Book Now"}
-                </button>
+                  Book Now
+                </Button>
               </form>
             ) : (
               <div className="text-center">
-                <p className="text-gray-600 mb-4">
+                <p className="mb-4 text-slate-400">
                   Please sign in to book this service
                 </p>
-                <Link
-                  href="/auth/login"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                >
-                  Sign In to Book
-                </Link>
+                <ButtonLink href="/auth/login">Sign In to Book</ButtonLink>
               </div>
             )}
           </div>

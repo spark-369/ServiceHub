@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/db/prisma";
+import { parsePagination, paginationMeta } from "@/lib/api/pagination";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,13 +11,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
     const paymentStatus = searchParams.get("paymentStatus") || "";
-
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(searchParams);
 
     const where: any = {};
     if (search) {
@@ -92,12 +90,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       bookings,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      pagination: paginationMeta(page, limit, total),
       filters: {
         statuses,
         paymentStatuses,
@@ -119,7 +112,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { bookingId, updates } = await request.json();
+    const body = await request.json();
+    const bookingId = body.bookingId;
+    // Accept both `{ bookingId, updates: {...} }` (used by the admin UI) and
+    // `{ bookingId, status, notes }` (top-level fields) for compatibility.
+    const updates = (body.updates ?? body) as Record<string, any>;
 
     if (!bookingId) {
       return NextResponse.json(
@@ -153,12 +150,23 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Whitelist mutable fields (never allow id/foreign keys to change here).
+    const data: Record<string, unknown> = {};
+    if (updates.status !== undefined) data.status = updates.status;
+    if (updates.paymentStatus !== undefined)
+      data.paymentStatus = updates.paymentStatus;
+    if (updates.notes !== undefined) data.notes = updates.notes;
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        { error: "No valid fields to update" },
+        { status: 400 },
+      );
+    }
+
     const updatedBooking = await prisma.booking.update({
       where: { id: bookingId },
-      data: {
-        ...updates,
-        updatedAt: new Date(),
-      },
+      data,
       include: {
         user: {
           select: {
@@ -188,7 +196,10 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ booking: updatedBooking });
+    return NextResponse.json({
+      message: "Booking updated successfully",
+      booking: updatedBooking,
+    });
   } catch (error) {
     console.error("Error updating booking:", error);
     return NextResponse.json(

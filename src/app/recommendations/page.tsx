@@ -1,63 +1,62 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import ReviewModal from "@/components/ReviewModal";
+import ReviewModal from "@/components/features/ReviewModal";
+import ServiceCard from "@/components/features/ServiceCard";
+import { Button, ButtonLink, Input, Badge, EmptyState } from "@/components/ui";
+import { apiFetch } from "@/lib/api-client";
+import type { Recommendation, Service } from "@/lib/types";
 
-interface Recommendation {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  price: number;
-  duration: number;
-  location: string;
-  rating: number;
-  reviewCount: number;
-  tags: string[];
-  provider: {
-    name: string;
-  };
-  relevanceScore: number;
-}
+const EXAMPLE_QUERIES = [
+  "house cleaning service",
+  "plumbing repair",
+  "personal trainer",
+  "home tutoring",
+  "car maintenance",
+  "hair styling",
+  "garden landscaping",
+  "electrical work",
+];
 
 export default function RecommendationsPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState(false);
-  const [selectedService, setSelectedService] = useState<Recommendation | null>(
-    null
-  );
-  const { user } = useAuth();
+  const [error, setError] = useState("");
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+
+  const { token } = useAuth();
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    const trimmed = query.trim();
+    if (!trimmed) return;
 
     setLoading(true);
+    setError("");
     try {
-      const response = await fetch(
-        `/api/recommendations?q=${encodeURIComponent(query)}`,
+      const data = await apiFetch<{ recommendations?: Recommendation[] }>(
+        `/api/recommendations?q=${encodeURIComponent(trimmed)}`,
         {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+          headers: token
+            ? { Authorization: `Bearer ${token}` }
+            : undefined,
         }
       );
-      const data = await response.json();
-      setRecommendations(data.recommendations || []);
+      setRecommendations(data.recommendations ?? []);
       setSearched(true);
-    } catch (error) {
-      console.error("Error fetching recommendations:", error);
+    } catch (err) {
+      console.error("Error fetching recommendations:", err);
+      setError("Could not load recommendations. Please try again.");
       setRecommendations([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleViewReviews = (service: Recommendation) => {
+  const handleViewReviews = (service: Service) => {
     setSelectedService(service);
   };
 
@@ -65,63 +64,80 @@ export default function RecommendationsPage() {
     setSelectedService(null);
   };
 
-  const exampleQueries = [
-    "house cleaning service",
-    "plumbing repair",
-    "personal trainer",
-    "home tutoring",
-    "car maintenance",
-    "hair styling",
-    "garden landscaping",
-    "electrical work",
-  ];
+  const runExample = (example: string) => {
+    setQuery(example);
+    const trimmed = example.trim();
+    if (!trimmed) return;
+    setLoading(true);
+    setError("");
+    apiFetch<{ recommendations?: Recommendation[] }>(
+      `/api/recommendations?q=${encodeURIComponent(trimmed)}`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      }
+    )
+      .then((data) => {
+        setRecommendations(data.recommendations ?? []);
+        setSearched(true);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError("Could not load recommendations. Please try again.");
+      })
+      .finally(() => setLoading(false));
+  };
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8">
-      <div className="text-center py-12">
-        <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl">
-          AI-Powered Recommendations
+    <div className="mx-auto max-w-6xl">
+      <header className="py-8 text-center">
+        <h1 className="text-3xl font-bold text-slate-100 sm:text-4xl">
+          AI Recommendations
         </h1>
-        <p className="mt-3 text-xl text-gray-500 sm:mt-4">
-          Discover services tailored to your needs using intelligent matching
+        <p className="mt-3 text-slate-400">
+          Describe what you need and we&apos;ll rank the best local matches using
+          on-device semantic search.
         </p>
-      </div>
+      </header>
 
       {/* Search Form */}
-      <div className="max-w-2xl mx-auto mb-8">
-        <form onSubmit={handleSearch} className="flex gap-4">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Describe what you're looking for..."
-            className="pl-3 flex-1 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            required
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-          >
-            {loading ? "Searching..." : "Find Services"}
-          </button>
-        </form>
-      </div>
+      <form
+        onSubmit={handleSearch}
+        className="mx-auto mb-8 flex max-w-2xl flex-col gap-3 sm:flex-row"
+      >
+        <Input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Describe what you're looking for..."
+          aria-label="Search query"
+          className="flex-1"
+        />
+        <Button type="submit" loading={loading} size="lg">
+          {loading ? "Searching..." : "Find Services"}
+        </Button>
+      </form>
+
+      {error && (
+        <div className="mx-auto mb-6 max-w-2xl rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {/* Example Queries */}
       {!searched && (
-        <div className="max-w-4xl mx-auto mb-8">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">
-            Try these examples:
+        <div className="mx-auto mb-8 max-w-4xl">
+          <h2 className="mb-4 text-base font-medium text-slate-300">
+            Not sure what to search? Try one of these:
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {exampleQueries.map((example, index) => (
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {EXAMPLE_QUERIES.map((example) => (
               <button
-                key={index}
-                onClick={() => setQuery(example)}
-                className="text-left p-3 border border-gray-200 rounded-md hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                key={example}
+                type="button"
+                onClick={() => runExample(example)}
+                className="rounded-md border border-slate-800 bg-slate-900 p-3 text-left text-sm text-slate-300 transition-colors hover:border-indigo-500/40 hover:bg-indigo-500/10"
               >
-                <span className="text-sm text-gray-700">{example}</span>
+                {example}
               </button>
             ))}
           </div>
@@ -130,146 +146,67 @@ export default function RecommendationsPage() {
 
       {/* Results */}
       {searched && (
-        <div className="max-w-6xl mx-auto">
+        <div>
+          {!loading && recommendations.length > 0 && (
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-100">
+                Found {recommendations.length} match
+                {recommendations.length !== 1 ? "es" : ""} for &ldquo;{query}
+                &rdquo;
+              </h2>
+              <Badge tone="success">Ranked by relevance</Badge>
+            </div>
+          )}
+
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-              <p className="mt-4 text-gray-500">Finding the best matches...</p>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-64 animate-pulse rounded-lg border border-slate-800 bg-slate-900"
+                />
+              ))}
             </div>
           ) : recommendations.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">
-                No recommendations found. Try different keywords.
-              </p>
-            </div>
+            <EmptyState
+              title="No recommendations found"
+              description="Try different or more general keywords to broaden your search."
+              action={
+                <ButtonLink href="/" variant="secondary">
+                  Browse all services
+                </ButtonLink>
+              }
+              icon={
+                <svg
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z"
+                  />
+                </svg>
+              }
+            />
           ) : (
-            <>
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Found {recommendations.length} recommendation
-                  {recommendations.length !== 1 ? "s" : ""} for "{query}"
-                </h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {recommendations.map((service) => (
-                  <div
-                    key={service.id}
-                    className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-medium text-gray-900">
-                          {service.name}
-                        </h3>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          {Math.round(service.relevanceScore * 100)}% match
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 line-clamp-2 mb-4">
-                        {service.description}
-                      </p>
-
-                      <div className="space-y-2 text-sm text-gray-600">
-                        <div className="flex items-center justify-between">
-                          <span>💰 ${service.price}</span>
-                          <span>⏱️ {service.duration} min</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span>
-                            ⭐ {service.rating.toFixed(1)} (
-                            {service.reviewCount})
-                          </span>
-                          <span>📍 {service.location}</span>
-                        </div>
-                        <div>👤 {service.provider.name}</div>
-                      </div>
-
-                      {service.tags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {service.tags.slice(0, 3).map((tag, index) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          {service.tags.length > 3 && (
-                            <span className="text-xs text-gray-500">
-                              +{service.tags.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="mt-4">
-                        <Link
-                          href={`/services/${service.id}`}
-                          className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                        >
-                          View Details
-                        </Link>
-                      </div>
-                      <div className="mt-2">
-                        <button
-                          onClick={() => handleViewReviews(service)}
-                          className="w-full inline-flex justify-center items-center px-4 py-2 border text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                        >
-                          View Reviews ({service.reviewCount})
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {recommendations.map((service) => (
+                <ServiceCard
+                  key={service.id}
+                  service={service}
+                  matchScore={service.relevanceScore}
+                  onViewReviews={handleViewReviews}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
-
-      {/* How it works */}
-      <div className="max-w-4xl mx-auto mt-16 bg-gray-50 rounded-lg p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          How AI Recommendations Work
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center">
-            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-indigo-600 font-bold text-xl">1</span>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Describe Your Need
-            </h3>
-            <p className="text-gray-600">
-              Tell us what service you're looking for in natural language
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-indigo-600 font-bold text-xl">2</span>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              AI Analysis
-            </h3>
-            <p className="text-gray-600">
-              Our AI analyzes service descriptions, tags, and categories to find
-              matches
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-indigo-600 font-bold text-xl">3</span>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Personalized Results
-            </h3>
-            <p className="text-gray-600">
-              Get ranked recommendations with relevance scores to help you
-              choose
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Review Modal */}
       {selectedService && (

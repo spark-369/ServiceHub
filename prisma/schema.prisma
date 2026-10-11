@@ -15,7 +15,7 @@ model User {
   password           String
   phone              String?
   address            String?
-  role               UserRole  @default(user)
+  role               UserRole  @default(customer)
   isVerified         Boolean   @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -25,6 +25,7 @@ model User {
   reviewsAsUser      Review[]  @relation("UserReviews")
   providedServices   Service[] @relation("ProviderServices")
 
+  @@index([role])
   @@map("users")
 }
 
@@ -48,6 +49,9 @@ model Service {
   reviews      Review[]
   provider     User      @relation("ProviderServices", fields: [providerId], references: [id])
 
+  @@index([category])
+  @@index([providerId])
+  @@index([isActive, rating])
   @@map("services")
 }
 
@@ -72,6 +76,11 @@ model Booking {
   user             User          @relation("UserBookings", fields: [userId], references: [id])
   review           Review?
 
+  @@index([userId, status])
+  @@index([providerId, status])
+  @@index([serviceId, date])
+  @@index([paymentStatus])
+  @@index([stripePaymentId])
   @@map("bookings")
 }
 
@@ -90,11 +99,24 @@ model Review {
   service    Service  @relation(fields: [serviceId], references: [id])
   user       User     @relation("UserReviews", fields: [userId], references: [id])
 
+  @@index([serviceId])
+  @@index([providerId])
   @@map("reviews")
 }
 
+/// Idempotency ledger for incoming payment-provider webhooks.
+model WebhookEvent {
+  id          String   @id
+  type        String
+  provider    String   @default("stripe")
+  processedAt DateTime @default(now())
+
+  @@index([provider, type])
+  @@map("webhook_events")
+}
+
 enum UserRole {
-  user
+  customer
   provider
   admin
 }

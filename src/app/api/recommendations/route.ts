@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/db/prisma";
 import { withAuth } from "@/middleware/auth";
-import { recommendServices } from "@/lib/ai";
+import { recommendServices } from "@/lib/integrations/ai";
 
-export const GET = withAuth(async (request: NextRequest, user: any) => {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    // Accept both `?q=` (frontend) and `?query=` (documented API alias).
+    const query = searchParams.get("q") || searchParams.get("query");
+    const category = searchParams.get("category");
+    const limitParam = searchParams.get("limit");
+    const limit = Math.min(
+      Math.max(Number.parseInt(limitParam || "10", 10) || 10, 1),
+      50
+    );
 
     if (!query) {
       return NextResponse.json(
@@ -16,9 +22,12 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
       );
     }
 
+    const where: any = { isActive: true };
+    if (category) where.category = category;
+
     // Get all active services with provider info
     const services = await prisma.service.findMany({
-      where: { isActive: true },
+      where,
       include: {
         provider: {
           select: {
@@ -27,6 +36,7 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
           },
         },
       },
+      orderBy: [{ rating: "desc" }, { reviewCount: "desc" }],
       take: 100, // Limit for performance
     });
 
@@ -42,7 +52,7 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
       (service: any) =>
         `${service.name} ${service.description} ${
           service.category
-        } ${service.tags.join(" ")}`
+        } ${(service.tags ?? []).join(" ")}`
     );
 
     // Get AI recommendations
@@ -52,7 +62,7 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
     const recommendations = validServices
       .map((service: any, index: number) => ({
         service,
-        similarity: similarities[index],
+        similarity: similarities[index] ?? 0,
       }))
       .sort((a: any, b: any) => b.similarity - a.similarity)
       .slice(0, limit)
@@ -67,10 +77,15 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
         rating: service.rating,
         reviewCount: service.reviewCount,
         tags: service.tags,
-        provider: {
-          name: service.provider.name,
-        },
-        relevanceScore: Math.round(similarity * 100) / 100, // Round to 2 decimal places
+        // A service's provider relation may be missing (orphaned listing);
+        // fall back to null rather than throwing on `provider.name`.
+        provider: service.provider
+          ? { name: service.provider.name }
+          : null,
+        // Expose the score under both names: `similarity` (raw) and
+        // `relevanceScore` (percentage-style, used by the UI).
+        similarity: Math.round(similarity * 100) / 100,
+        relevanceScore: Math.round(similarity * 100) / 100,
       }));
 
     return NextResponse.json({ recommendations });

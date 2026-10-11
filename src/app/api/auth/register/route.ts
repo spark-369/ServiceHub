@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/db/prisma";
 import { hashPassword, generateToken } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -15,8 +15,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reject unknown roles early (otherwise Prisma throws a 500 on the enum).
+    // `user` is still accepted as an alias and mapped to the `customer` role.
+    const requestedRole = role === "user" ? "customer" : role ?? "customer";
+    if (!["customer", "provider", "admin"].includes(requestedRole)) {
+      return NextResponse.json(
+        { error: "Invalid role" },
+        { status: 400 }
+      );
+    }
+
+    // Password policy. Admins get a distinct (specific) message to match the
+    // documented behaviour; everyone else shares a generic minimum length.
+    if (typeof password !== "string" || password.length < 8) {
+      if (requestedRole === "admin") {
+        return NextResponse.json(
+          { error: "Admin passwords must be at least 8 characters long" },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters long" },
+        { status: 400 }
+      );
+    }
+
     // Admin registration security
-    if (role === "admin") {
+    if (requestedRole === "admin") {
       // Check if admin already exists
       const existingAdmin = await prisma.user.findFirst({
         where: { role: "admin" },
@@ -24,14 +49,6 @@ export async function POST(request: NextRequest) {
       if (existingAdmin) {
         return NextResponse.json(
           { error: "Admin account already exists. Please contact existing admin." },
-          { status: 400 }
-        );
-      }
-      
-      // Require stronger password for admin
-      if (password.length < 8) {
-        return NextResponse.json(
-          { error: "Admin passwords must be at least 8 characters long" },
           { status: 400 }
         );
       }
@@ -59,7 +76,7 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         phone,
         address,
-        role: role || "user",
+        role: requestedRole,
         // Location will be set via separate API call from client
       },
     });

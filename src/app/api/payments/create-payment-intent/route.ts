@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe, formatAmountForStripe } from '@/lib/stripe';
+import { stripe, formatAmountForStripe } from '@/lib/integrations/stripe';
 import { getUserFromRequest } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/db/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,6 +69,18 @@ export async function POST(request: NextRequest) {
         bookingId: bookingId,
         userId: user.userId,
         serviceId: booking.serviceId,
+      },
+    });
+
+    // Persist the payment intent id so webhooks/refunds can reconcile the
+    // booking even if the client never calls the confirm endpoint.
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        stripePaymentId: paymentIntent.id,
+        ...(typeof paymentIntent.customer === 'string'
+          ? { stripeCustomerId: paymentIntent.customer }
+          : {}),
       },
     });
 

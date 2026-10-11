@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/db/prisma";
 import { withAuth } from "@/middleware/auth";
 
 export const GET = withAuth(async (request: NextRequest, user: any) => {
@@ -67,6 +67,10 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
         notes: booking.notes,
         totalPrice: booking.totalPrice,
         paymentStatus: booking.paymentStatus,
+        paidAt: booking.paidAt,
+        refundedAt: booking.refundedAt,
+        stripePaymentId: booking.stripePaymentId,
+        stripeCustomerId: booking.stripeCustomerId,
         service: {
           id: booking.service.id,
           name: booking.service.name,
@@ -117,7 +121,10 @@ export const PUT = withAuth(async (request: NextRequest, user: any) => {
     const { status, notes } = await request.json();
 
     // Authorization checks
-    if (user.role === "user" && booking.userId !== user.userId) {
+    if (
+      (user.role === "customer" || user.role === "user") &&
+      booking.userId !== user.userId
+    ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -125,8 +132,10 @@ export const PUT = withAuth(async (request: NextRequest, user: any) => {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Status transition validation
+    // Status transition validation. Keyed by the customer-facing role names;
+    // `user` is kept as a legacy alias for older JWTs.
     const allowedStatuses: { [key: string]: string[] } = {
+      customer: ["cancelled"],
       user: ["cancelled"],
       provider: ["confirmed", "in_progress", "completed", "cancelled"],
       admin: ["pending", "confirmed", "in_progress", "completed", "cancelled"],
@@ -137,6 +146,26 @@ export const PUT = withAuth(async (request: NextRequest, user: any) => {
         { error: "Invalid status transition" },
         { status: 400 },
       );
+    }
+
+    // Guard against nonsensical transitions (e.g. re-opening a completed or
+    // cancelled booking, or moving backwards).
+    if (status) {
+      const transitions: Record<string, string[]> = {
+        pending: ["confirmed", "cancelled"],
+        confirmed: ["in_progress", "completed", "cancelled"],
+        in_progress: ["completed", "cancelled"],
+        completed: [],
+        cancelled: [],
+      };
+
+      const permitted = transitions[booking.status] ?? [];
+      if (status !== booking.status && !permitted.includes(status)) {
+        return NextResponse.json(
+          { error: `Cannot change status from ${booking.status} to ${status}` },
+          { status: 400 },
+        );
+      }
     }
 
     const updateData: any = {};

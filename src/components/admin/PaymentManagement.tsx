@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useToast } from "@/context/ToastContext";
 
 interface Payment {
   id: string;
@@ -8,6 +9,11 @@ interface Payment {
   status: string;
   paymentStatus: string;
   totalPrice: number;
+  /** Payment lifecycle timestamps + Stripe references from the booking row. */
+  paidAt?: string | null;
+  refundedAt?: string | null;
+  stripePaymentId?: string | null;
+  stripeCustomerId?: string | null;
   createdAt: string;
   user: {
     id: string;
@@ -20,7 +26,7 @@ interface Payment {
     name: string;
     email: string;
     phone?: string;
-  };
+  } | null;
   service: {
     id: string;
     name: string;
@@ -52,6 +58,7 @@ interface PaymentManagementProps {
 export default function PaymentManagement({
   onDataChange,
 }: PaymentManagementProps) {
+  const toast = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<PaymentStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +75,7 @@ export default function PaymentManagement({
   const [filters, setFilters] = useState<{ statuses: string[] }>({
     statuses: [],
   });
-  const [refundingPayment, setRefundingPayment] = useState<string | null>(null);
+  const [busyPaymentId, setBusyPaymentId] = useState<string | null>(null);
 
   const fetchPayments = async () => {
     try {
@@ -113,7 +120,7 @@ export default function PaymentManagement({
     amount?: number
   ) => {
     try {
-      setRefundingPayment(bookingId);
+      setBusyPaymentId(bookingId);
       const response = await fetch("/api/admin/payments", {
         method: "POST",
         headers: {
@@ -128,48 +135,99 @@ export default function PaymentManagement({
       if (response.ok) {
         fetchPayments();
         onDataChange?.();
-        alert(data.message || "Action completed successfully");
+        toast.success(data.message || "Action completed successfully");
       } else {
         setError(data.error || `Failed to ${action} payment`);
       }
     } catch (error) {
       setError("Network error occurred");
     } finally {
-      setRefundingPayment(null);
+      setBusyPaymentId(null);
     }
   };
 
-  const handleRefund = async (bookingId: string, totalPrice: number) => {
-    const refundAmount = prompt(
-      `Enter refund amount (max: $${totalPrice})`,
-      totalPrice.toString()
-    );
-    if (refundAmount === null) return;
+  // Admin CRUD — update a payment's status via the PUT endpoint.
+  const handleUpdateStatus = async (bookingId: string, paymentStatus: string) => {
+    try {
+      setBusyPaymentId(bookingId);
+      const response = await fetch("/api/admin/payments", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ bookingId, paymentStatus }),
+      });
 
-    const amount = parseFloat(refundAmount);
-    if (isNaN(amount) || amount <= 0 || amount > totalPrice) {
-      alert("Invalid refund amount");
+      const data = await response.json();
+
+      if (response.ok) {
+        fetchPayments();
+        onDataChange?.();
+        toast.success("Payment updated");
+      } else {
+        toast.error(data.error || "Failed to update payment");
+      }
+    } catch (error) {
+      toast.error("Network error occurred");
+    } finally {
+      setBusyPaymentId(null);
+    }
+  };
+
+  // Admin CRUD — delete the payment record (resets the booking's payment fields).
+  const handleDeletePayment = async (bookingId: string) => {
+    if (
+      !confirm(
+        "Delete this payment record? The booking is kept, but its payment fields are reset."
+      )
+    ) {
       return;
     }
 
-    await handlePaymentAction(bookingId, "refund", amount);
+    try {
+      setBusyPaymentId(bookingId);
+      const response = await fetch(
+        `/api/admin/payments?bookingId=${encodeURIComponent(bookingId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        fetchPayments();
+        onDataChange?.();
+        toast.success("Payment record deleted");
+      } else {
+        toast.error(data.error || "Failed to delete payment");
+      }
+    } catch (error) {
+      toast.error("Network error occurred");
+    } finally {
+      setBusyPaymentId(null);
+    }
   };
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case "paid":
-        return "bg-green-100 text-green-800";
+        return "bg-emerald-500/10 text-emerald-300 ring-1 ring-inset ring-emerald-500/20";
       case "refunded":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-500/10 text-purple-300 ring-1 ring-inset ring-purple-500/20";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-slate-500/10 text-slate-300 ring-1 ring-inset ring-slate-500/20";
     }
   };
 
   if (loading && payments.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
@@ -179,10 +237,10 @@ export default function PaymentManagement({
       {/* Header and Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
+          <h3 className="text-lg leading-6 font-medium text-slate-100">
             Payment Management
           </h3>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-slate-400">
             Monitor transactions, process refunds, and view payment analytics
           </p>
         </div>
@@ -192,16 +250,16 @@ export default function PaymentManagement({
             placeholder="Search payments..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="px-3 py-2 border border-slate-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="bg-slate-900 text-slate-100 px-3 py-2 border border-slate-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-40"
           >
-            <option value="">All Status</option>
+            <option value="" className="bg-slate-900 text-slate-100">All Status</option>
             {filters.statuses.map((status) => (
-              <option key={status} value={status}>
+              <option key={status} value={status} className="bg-slate-900 text-slate-100">
                 {status}
               </option>
             ))}
@@ -212,19 +270,19 @@ export default function PaymentManagement({
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-lg shadow">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
                   <span className="text-white text-sm font-medium">$</span>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-slate-400 truncate">
                     Total Revenue
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-slate-100">
                     ${stats.totalRevenue.toFixed(2)}
                   </dd>
                 </dl>
@@ -232,7 +290,7 @@ export default function PaymentManagement({
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-lg shadow">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
@@ -241,10 +299,10 @@ export default function PaymentManagement({
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-slate-400 truncate">
                     Total Transactions
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-slate-100">
                     {stats.totalTransactions}
                   </dd>
                 </dl>
@@ -252,7 +310,7 @@ export default function PaymentManagement({
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-lg shadow">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
@@ -261,10 +319,10 @@ export default function PaymentManagement({
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-slate-400 truncate">
                     Paid Transactions
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-slate-100">
                     {stats.statusDistribution.find(
                       (s) => s.paymentStatus === "paid"
                     )?.count || 0}
@@ -274,7 +332,7 @@ export default function PaymentManagement({
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-lg shadow">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
@@ -283,10 +341,10 @@ export default function PaymentManagement({
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
+                  <dt className="text-sm font-medium text-slate-400 truncate">
                     Refunded
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">
+                  <dd className="text-lg font-medium text-slate-100">
                     {stats.statusDistribution.find(
                       (s) => s.paymentStatus === "refunded"
                     )?.count || 0}
@@ -299,39 +357,39 @@ export default function PaymentManagement({
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="text-red-800 text-sm">{error}</div>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-4">
+          <div className="text-red-300 text-sm">{error}</div>
         </div>
       )}
 
       {/* Payments Table */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
+      <div className="bg-slate-900 border border-slate-800 shadow overflow-hidden sm:rounded-md">
+        <ul className="divide-y divide-slate-800">
           {payments.map((payment) => (
             <li key={payment.id} className="px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900">
+                      <h3 className="text-lg font-medium text-slate-100">
                         {payment.service.name}
                       </h3>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-slate-400 mt-1">
                         Customer: {payment.user.name} ({payment.user.email})
                       </p>
-                      <p className="text-sm text-gray-600">
-                        Provider: {payment.provider.name} (
-                        {payment.provider.email})
+                      <p className="text-sm text-slate-400">
+                        Provider: {payment.provider?.name ?? "Unknown"}
+                        {payment.provider?.email ? ` (${payment.provider.email})` : ""}
                       </p>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-slate-500 mt-1">
                         Category: {payment.service.category}
                       </p>
                     </div>
                     <div className="text-right ml-4">
-                      <div className="text-lg font-semibold text-gray-900">
+                      <div className="text-lg font-semibold text-slate-100">
                         ${payment.totalPrice}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-slate-500">
                         {new Date(payment.createdAt).toLocaleDateString()}
                       </div>
                     </div>
@@ -345,9 +403,34 @@ export default function PaymentManagement({
                     >
                       {payment.paymentStatus}
                     </span>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-slate-500">
                       Service Price: ${payment.service.price}
                     </span>
+                  </div>
+
+                  {/* Payment lifecycle + Stripe references stored on the booking. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    {payment.paidAt && (
+                      <span>
+                        Paid: {new Date(payment.paidAt).toLocaleString()}
+                      </span>
+                    )}
+                    {payment.refundedAt && (
+                      <span>
+                        Refunded:{" "}
+                        {new Date(payment.refundedAt).toLocaleString()}
+                      </span>
+                    )}
+                    {payment.stripePaymentId && (
+                      <span className="break-all">
+                        Stripe payment: {payment.stripePaymentId}
+                      </span>
+                    )}
+                    {payment.stripeCustomerId && (
+                      <span className="break-all">
+                        Stripe customer: {payment.stripeCustomerId}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -357,21 +440,33 @@ export default function PaymentManagement({
                   <>
                     <button
                       onClick={() =>
-                        handleRefund(payment.id, payment.totalPrice)
+                        handleUpdateStatus(
+                          payment.id,
+                          payment.paymentStatus === "paid" ? "pending" : "paid"
+                        )
                       }
-                      disabled={refundingPayment === payment.id}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-purple-700 bg-red-300 hover:bg-purple-200 disabled:opacity-50"
+                      disabled={busyPaymentId === payment.id}
+                      className="inline-flex items-center px-3 py-1 border border-slate-700 text-sm font-medium rounded-md text-indigo-300 bg-slate-800 hover:bg-indigo-500/10 disabled:opacity-50"
                     >
-                      {refundingPayment === payment.id
-                        ? "Processing..."
-                        : "Refund"}
+                      {busyPaymentId === payment.id
+                        ? "Saving..."
+                        : payment.paymentStatus === "paid"
+                          ? "Mark Unpaid"
+                          : "Mark Paid"}
+                    </button>
+                    <button
+                      onClick={() => handleDeletePayment(payment.id)}
+                      disabled={busyPaymentId === payment.id}
+                      className="inline-flex items-center px-3 py-1 border border-red-500/30 text-sm font-medium rounded-md text-red-300 bg-slate-800 hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      Delete
                     </button>
                   </>
                 )}
                 {payment.paymentStatus === "pending" && (
                   <button
                     onClick={() => handlePaymentAction(payment.id, "mark_paid")}
-                    className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200"
+                    className="inline-flex items-center px-3 py-1 border border-emerald-500/30 text-sm font-medium rounded-md text-emerald-300 bg-slate-800 hover:bg-emerald-500/10"
                   >
                     Mark as Paid
                   </button>
@@ -382,7 +477,7 @@ export default function PaymentManagement({
         </ul>
 
         {payments.length === 0 && !loading && (
-          <div className="px-6 py-8 text-center text-gray-500">
+          <div className="px-6 py-8 text-center text-slate-400">
             No payments found
           </div>
         )}
@@ -391,7 +486,7 @@ export default function PaymentManagement({
       {/* Pagination */}
       {pagination.pages > 1 && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-slate-400">
             Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
             {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
             {pagination.total} results
@@ -400,17 +495,17 @@ export default function PaymentManagement({
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border border-slate-700 rounded-md text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-800"
             >
               Previous
             </button>
-            <span className="px-3 py-2 text-sm">
+            <span className="px-3 py-2 text-sm text-slate-300">
               Page {currentPage} of {pagination.pages}
             </span>
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === pagination.pages}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              className="px-3 py-2 text-sm border border-slate-700 rounded-md text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-800"
             >
               Next
             </button>
@@ -420,27 +515,27 @@ export default function PaymentManagement({
 
       {/* Monthly Revenue Chart (if data available) */}
       {stats?.monthlyRevenue && stats.monthlyRevenue.length > 0 && (
-        <div className="bg-white shadow rounded-lg p-6">
-          <h4 className="text-lg font-medium text-gray-900 mb-4">
+        <div className="bg-slate-900 border border-slate-800 shadow rounded-lg p-6">
+          <h4 className="text-lg font-medium text-slate-100 mb-4">
             Monthly Revenue (Last 12 Months)
           </h4>
           <div className="space-y-2">
             {stats.monthlyRevenue.slice(0, 6).map((month, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between py-2 border-b border-gray-200 last:border-b-0"
+                className="flex items-center justify-between py-2 border-b border-slate-800 last:border-b-0"
               >
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-slate-400">
                   {new Date(month.month).toLocaleDateString("en-US", {
                     month: "long",
                     year: "numeric",
                   })}
                 </span>
                 <div className="text-sm">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-slate-100">
                     ${Number(month.revenue).toFixed(2)}
                   </span>
-                  <span className="text-gray-500 ml-2">
+                  <span className="text-slate-500 ml-2">
                     ({month.count} transactions)
                   </span>
                 </div>

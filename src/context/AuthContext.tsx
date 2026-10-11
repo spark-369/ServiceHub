@@ -12,7 +12,34 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "user" | "provider" | "admin";
+  role: "customer" | "provider" | "admin";
+}
+
+/**
+ * The database `UserRole` enum uses `customer` (renamed from the legacy `user`).
+ * Normalising keeps the client consistent and still tolerates the old `user`
+ * value coming from persisted sessions.
+ */
+function normaliseRole(role: unknown): User["role"] {
+  switch (role) {
+    case "provider":
+      return "provider";
+    case "admin":
+      return "admin";
+    case "customer":
+    case "user":
+    default:
+      return "customer";
+  }
+}
+
+function normaliseUser(raw: any): User {
+  return {
+    id: raw?.id,
+    name: raw?.name,
+    email: raw?.email,
+    role: normaliseRole(raw?.role),
+  };
 }
 
 interface AuthContextType {
@@ -52,14 +79,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+    try {
+      const storedToken = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      if (storedToken && storedUser) {
+        const parsed = normaliseUser(JSON.parse(storedUser));
+        setToken(storedToken);
+        setUser(parsed);
+        // Rewrite so any previously-stored raw `"user"` role is migrated.
+        localStorage.setItem("user", JSON.stringify(parsed));
+      }
+    } catch {
+      // Corrupt storage should never crash the app — clear and continue.
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
+
+  /**
+   * Location is intentionally NOT tracked here.
+   *
+   * Storing the user's position only happens while the location map is open
+   * (see `components/features/LocationMap.tsx`). This keeps the app from
+   * requesting location permission or writing position data on every sign-in,
+   * and means a user only shares their location deliberately, when they open
+   * the map.
+   */
 
   const login = async (email: string, password: string) => {
     setLoading(true);
@@ -72,10 +119,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
 
-      setUser(data.user);
+      const normalised = normaliseUser(data.user);
+      setUser(normalised);
       setToken(data.token);
       localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("user", JSON.stringify(normalised));
     } catch (error) {
       throw error;
     } finally {
@@ -112,7 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem("token");

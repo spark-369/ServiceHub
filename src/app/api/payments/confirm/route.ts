@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
+import { stripe, formatAmountForStripe } from '@/lib/integrations/stripe';
 import { getUserFromRequest } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/db/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,13 +56,54 @@ export async function POST(request: NextRequest) {
     // Retrieve the payment intent from Stripe to verify payment status
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
+    // Ensure the intent actually belongs to this booking and this user before
+    // marking anything paid (prevents "confirm" being used with an unrelated
+    // succeeded intent id).
+    const meta = paymentIntent.metadata ?? {};
+    if (meta.bookingId && meta.bookingId !== bookingId) {
+      return NextResponse.json(
+        { error: "Payment intent does not match this booking" },
+        { status: 400 }
+      );
+    }
+    if (meta.userId && meta.userId !== user.userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // If we already stored this intent id, it must match too.
+    if (
+      booking.stripePaymentId &&
+      booking.stripePaymentId !== paymentIntent.id
+    ) {
+      return NextResponse.json(
+        { error: "Payment intent does not match this booking" },
+        { status: 400 }
+      );
+    }
+
+    // Optionally sanity-check the amount when both are present.
+    if (
+      typeof paymentIntent.amount === "number" &&
+      paymentIntent.amount !==
+        formatAmountForStripe(booking.totalPrice, paymentIntent.currency)
+    ) {
+      return NextResponse.json(
+        { error: "Payment amount does not match booking total" },
+        { status: 400 }
+      );
+    }
+
     if (paymentIntent.status === 'succeeded') {
       // Update booking payment status
       await prisma.booking.update({
         where: { id: bookingId },
-        data: { 
+        data: {
           paymentStatus: 'paid',
-          updatedAt: new Date(),
+          paidAt: new Date(),
+          stripePaymentId: paymentIntent.id,
+          ...(typeof paymentIntent.customer === 'string'
+            ? { stripeCustomerId: paymentIntent.customer }
+            : {}),
         },
       });
 

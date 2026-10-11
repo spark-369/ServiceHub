@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/db/prisma';
+import { parsePagination, paginationMeta } from '@/lib/api/pagination';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,13 +11,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const category = searchParams.get('category') || '';
     const isActive = searchParams.get('isActive');
-
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(searchParams);
 
     const where: any = {};
     if (search) {
@@ -28,7 +26,7 @@ export async function GET(request: NextRequest) {
     if (category) {
       where.category = category;
     }
-    if (isActive !== null && isActive !== undefined) {
+    if (isActive !== null && isActive !== undefined && isActive !== '') {
       where.isActive = isActive === 'true';
     }
 
@@ -65,12 +63,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       services,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      pagination: paginationMeta(page, limit, total),
       categories: categories.map(c => c.category),
     });
   } catch (error) {
@@ -89,15 +82,49 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { serviceId, updates } = await request.json();
+    const body = await request.json();
+    const serviceId = body.serviceId;
+    const updates = (body.updates ?? body) as Record<string, any>;
 
     if (!serviceId) {
       return NextResponse.json({ error: 'Service ID is required' }, { status: 400 });
     }
 
+    // Whitelist + coerce numeric fields (form values arrive as strings, which
+    // Prisma rejects for Float/Int columns).
+    const data: Record<string, unknown> = {};
+    if (typeof updates === 'object' && updates !== null) {
+      if (updates.name !== undefined) data.name = updates.name;
+      if (updates.description !== undefined) data.description = updates.description;
+      if (updates.category !== undefined) data.category = updates.category;
+      if (updates.location !== undefined) data.location = updates.location;
+      if (updates.price !== undefined) {
+        const price = Number(updates.price);
+        if (!Number.isFinite(price)) {
+          return NextResponse.json({ error: 'Invalid price' }, { status: 400 });
+        }
+        data.price = price;
+      }
+      if (updates.duration !== undefined) {
+        const duration = Number.parseInt(String(updates.duration), 10);
+        if (!Number.isFinite(duration)) {
+          return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
+        }
+        data.duration = duration;
+      }
+      if (updates.isActive !== undefined) data.isActive = Boolean(updates.isActive);
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        { error: 'No valid fields to update' },
+        { status: 400 }
+      );
+    }
+
     const updatedService = await prisma.service.update({
       where: { id: serviceId },
-      data: updates,
+      data,
       include: {
         provider: {
           select: {

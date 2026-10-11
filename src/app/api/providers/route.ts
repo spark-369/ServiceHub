@@ -1,87 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/db/prisma";
 import { withAuth, withRole } from "@/middleware/auth";
 import { hashPassword } from "@/lib/auth";
+import { parsePagination, paginationMeta } from "@/lib/api/pagination";
 
-export const GET = withAuth(async (request: NextRequest, user: any) => {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const verified = searchParams.get("verified");
+    const { page, limit, skip } = parsePagination(searchParams);
 
-    const skip = (page - 1) * limit;
+    const where: any = { role: "provider" };
+    if (verified === "true" || verified === "false") {
+      where.isVerified = verified === "true";
+    }
 
-    // Get all providers with basic info
-    const providers = await prisma.user.findMany({
-      where: { role: "provider" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        address: true,
-        createdAt: true,
-      },
-      skip,
-      take: limit,
-    });
-
-    // Get provider stats for each provider
-    const providerStats = await Promise.all(
-      providers.map(async (provider: any) => {
-        // Get services count
-        const services = await prisma.service.findMany({
-          where: { providerId: provider.id },
-          select: { id: true },
-        });
-
-        // Get total bookings count
-        const totalBookings = await prisma.booking.count({
-          where: { providerId: provider.id },
-        });
-
-        // Get average rating from reviews
-        const avgRatingData = await prisma.review.aggregate({
-          where: {
-            service: {
-              providerId: provider.id,
+    // Fetch providers and their aggregate counts in a single round-trip
+    // (previously this was an N+1: one query set per provider).
+    const [providers, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          address: true,
+          role: true,
+          isVerified: true,
+          createdAt: true,
+          _count: {
+            select: {
+              providedServices: true,
+              bookingsAsProvider: true,
             },
           },
-          _avg: {
-            rating: true,
-          },
-          _count: {
-            rating: true,
-          },
-        });
-
-        return {
-          id: provider.id,
-          name: provider.name,
-          email: provider.email,
-          phone: provider.phone,
-          address: provider.address,
-          servicesCount: services.length,
-          totalBookings,
-          avgRating: avgRatingData._avg.rating || 0,
-          reviewCount: avgRatingData._count.rating || 0,
-          createdAt: provider.createdAt,
-        };
-      })
-    );
-
-    const total = await prisma.user.count({
-      where: { role: "provider" },
-    });
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
     return NextResponse.json({
-      providers: providerStats,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      providers: providers.map((provider: any) => ({
+        id: provider.id,
+        name: provider.name,
+        email: provider.email,
+        phone: provider.phone,
+        address: provider.address,
+        role: provider.role,
+        isVerified: provider.isVerified,
+        servicesCount: provider._count?.providedServices ?? 0,
+        totalBookings: provider._count?.bookingsAsProvider ?? 0,
+        createdAt: provider.createdAt,
+      })),
+      pagination: paginationMeta(page, limit, total),
     });
   } catch (error) {
     console.error("Providers list error:", error);
@@ -93,7 +68,7 @@ export const GET = withAuth(async (request: NextRequest, user: any) => {
 });
 
 export const POST = withRole(["admin"])(
-  async (request: NextRequest, user: any) => {
+  async (request: NextRequest) => {
     try {
       const { name, email, password, phone, address } = await request.json();
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/db/prisma";
 import { withAuth } from "@/middleware/auth";
 
 export const POST = withAuth(async (request: NextRequest, user: any) => {
@@ -7,14 +7,19 @@ export const POST = withAuth(async (request: NextRequest, user: any) => {
     const { bookingId, rating, comment } = await request.json();
 
     // Validation
-    if (!bookingId || !rating) {
+    if (!bookingId || rating === undefined || rating === null) {
       return NextResponse.json(
         { error: "Booking ID and rating are required" },
         { status: 400 }
       );
     }
 
-    if (rating < 1 || rating > 5) {
+    const numericRating = Number(rating);
+    if (
+      !Number.isInteger(numericRating) ||
+      numericRating < 1 ||
+      numericRating > 5
+    ) {
       return NextResponse.json(
         { error: "Rating must be between 1 and 5" },
         { status: 400 }
@@ -62,7 +67,7 @@ export const POST = withAuth(async (request: NextRequest, user: any) => {
         serviceId: booking.serviceId,
         providerId: booking.providerId,
         bookingId: bookingId,
-        rating,
+        rating: numericRating,
         comment,
       },
     });
@@ -97,16 +102,24 @@ async function updateServiceRating(serviceId: string) {
     select: { rating: true },
   });
 
-  if (reviews.length > 0) {
-    const avgRating =
-      reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / reviews.length;
-
+  if (reviews.length === 0) {
+    // No reviews left — reset rather than keep stale aggregates.
     await prisma.service.update({
       where: { id: serviceId },
-      data: {
-        rating: Math.round(avgRating * 10) / 10, // Round to 1 decimal place
-        reviewCount: reviews.length,
-      },
+      data: { rating: 0, reviewCount: 0 },
     });
+    return;
   }
+
+  const avgRating =
+    reviews.reduce((sum: number, review: any) => sum + review.rating, 0) /
+    reviews.length;
+
+  await prisma.service.update({
+    where: { id: serviceId },
+    data: {
+      rating: Math.round(avgRating * 10) / 10, // Round to 1 decimal place
+      reviewCount: reviews.length,
+    },
+  });
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { stripe } from '@/lib/stripe';
+import { prisma } from '@/lib/db/prisma';
+import { parsePagination, paginationMeta } from '@/lib/api/pagination';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +11,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
-
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(searchParams);
 
     const where: any = {
       paymentStatus: { not: 'pending' }, // Only show completed payments
@@ -125,12 +122,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       payments,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      pagination: paginationMeta(page, limit, total),
       stats: {
         totalRevenue: revenueStats._sum.totalPrice || 0,
         totalTransactions: revenueStats._count.id || 0,
@@ -157,7 +149,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { action, bookingId, amount } = await request.json();
+    const { action, bookingId } = await request.json();
 
     if (!action || !bookingId) {
       return NextResponse.json({ error: 'Action and booking ID are required' }, { status: 400 });
@@ -176,71 +168,6 @@ export async function POST(request: NextRequest) {
     }
 
     switch (action) {
-      case 'refund':
-        if (booking.paymentStatus !== 'paid') {
-          return NextResponse.json({ error: 'Cannot refund unpaid booking' }, { status: 400 });
-        }
-
-        // Process refund through Stripe (if stripePaymentId exists)
-        let refundResult = null;
-        const anyBooking = booking as any;
-        if (anyBooking.stripePaymentId && stripe) {
-          try {
-            refundResult = await stripe.refunds.create({
-              payment_intent: anyBooking.stripePaymentId,
-              amount: amount ? Math.round(amount * 100) : undefined, // Convert to cents
-            });
-          } catch (stripeError: any) {
-            console.error('Stripe refund error:', stripeError);
-            return NextResponse.json(
-              { error: 'Refund processing failed: ' + stripeError.message },
-              { status: 400 }
-            );
-          }
-        }
-
-        // Update booking status
-        const updatedBooking = await prisma.booking.update({
-          where: { id: bookingId },
-          data: {
-            paymentStatus: 'refunded',
-            updatedAt: new Date(),
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-              },
-            },
-            provider: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-              },
-            },
-            service: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-                category: true,
-                price: true,
-              },
-            },
-          },
-        });
-
-        return NextResponse.json({
-          booking: updatedBooking,
-          refund: refundResult,
-          message: 'Refund processed successfully',
-        });
-
       case 'mark_paid':
         if (booking.paymentStatus === 'paid') {
           return NextResponse.json({ error: 'Booking already paid' }, { status: 400 });
@@ -291,6 +218,141 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('Error processing payment action:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PUT /api/admin/payments
+ *
+ * Admin CRUD — update a booking's payment fields. Only a whitelist of payment
+ * columns can be changed; anything else (e.g. the booking's price or status) is
+ * ignored so an admin cannot silently rewrite the booking itself.
+ *
+ * Body: { bookingId, paymentStatus?, stripePaymentId?, stripeCustomerId? }
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const user = getUserFromRequest(request);
+    if (!user || user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { bookingId, paymentStatus, stripePaymentId, stripeCustomerId } =
+      await request.json();
+
+    if (!bookingId) {
+      return NextResponse.json({ error: 'Booking ID is required' }, { status: 400 });
+    }
+
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    const validPaymentStatuses = ['pending', 'paid', 'refunded'];
+    const data: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (paymentStatus !== undefined) {
+      if (!validPaymentStatuses.includes(paymentStatus)) {
+        return NextResponse.json(
+          { error: 'Invalid payment status' },
+          { status: 400 }
+        );
+      }
+      data.paymentStatus = paymentStatus;
+      // Keep the paid/refunded timestamps coherent with the status.
+      if (paymentStatus === 'paid') data.paidAt = new Date();
+      if (paymentStatus === 'refunded') data.refundedAt = new Date();
+    }
+
+    if (stripePaymentId !== undefined) data.stripePaymentId = stripePaymentId;
+    if (stripeCustomerId !== undefined) data.stripeCustomerId = stripeCustomerId;
+
+    const updated = await prisma.booking.update({
+      where: { id: bookingId },
+      data,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true },
+        },
+        provider: {
+          select: { id: true, name: true, email: true, phone: true },
+        },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            category: true,
+            price: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      booking: updated,
+      message: 'Payment updated successfully',
+    });
+  } catch (error) {
+    console.error('Error updating payment:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/admin/payments
+ *
+ * Admin CRUD — delete a payment *record*. Because payments live on the booking
+ * row (there is no separate payments table), this resets the booking's payment
+ * fields back to their defaults while keeping the booking itself intact.
+ *
+ * Query: ?bookingId=<id>
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const user = getUserFromRequest(request);
+    if (!user || user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const bookingId = searchParams.get('bookingId');
+
+    if (!bookingId) {
+      return NextResponse.json({ error: 'Booking ID is required' }, { status: 400 });
+    }
+
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    const reset = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        paymentStatus: 'pending',
+        paidAt: null,
+        refundedAt: null,
+        stripePaymentId: null,
+        stripeCustomerId: null,
+        updatedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      booking: { id: reset.id, paymentStatus: reset.paymentStatus },
+      message: 'Payment record deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting payment:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
