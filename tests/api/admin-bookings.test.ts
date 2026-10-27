@@ -31,6 +31,9 @@ describe('Admin Bookings API Tests', () => {
       expect(getUserFromRequest).toHaveBeenCalledWith(request);
       expect(prisma.booking.findMany).toHaveBeenCalledWith({
         where: {},
+        skip: 0,
+        take: 10,
+        orderBy: { createdAt: 'desc' },
         include: {
           user: {
             select: {
@@ -53,14 +56,19 @@ describe('Admin Bookings API Tests', () => {
               id: true,
               name: true,
               description: true,
+              category: true,
               price: true,
-              duration: true,
+            },
+          },
+          review: {
+            select: {
+              id: true,
+              rating: true,
+              comment: true,
+              createdAt: true,
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
-        skip: 0,
-        take: 10,
       });
 
       expect(result.json).toHaveBeenCalledWith({
@@ -75,6 +83,10 @@ describe('Admin Bookings API Tests', () => {
           limit: 10,
           total: 1,
           pages: 1,
+        },
+        filters: {
+          statuses: ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled'],
+          paymentStatuses: ['pending', 'paid', 'refunded'],
         },
       });
     });

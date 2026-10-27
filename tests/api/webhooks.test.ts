@@ -1,4 +1,4 @@
-import { POST as StripeWebhookPOST } from "@/app/api/webhooks/stripe/route";
+import { POST as StripeWebhookPOST, GET as StripeWebhookGET } from "@/app/api/webhooks/stripe/route";
 import { prisma } from "@/lib/db/prisma";
 import { stripe } from "@/lib/integrations/stripe";
 import { createMockRequest } from '../utils/test-utils';
@@ -141,5 +141,15 @@ describe("Stripe Webhook API Tests", () => {
       where: { id: "booking123" },
       data: expect.objectContaining({ paymentStatus: "refunded" }),
     });
+  });
+
+  it("should return 405 for non-POST requests", async () => {
+    const response = await StripeWebhookGET();
+
+    expect(response.json).toHaveBeenCalledWith({
+      error: "Method not allowed",
+      code: "METHOD_NOT_ALLOWED",
+    });
+    expect(response.status).toHaveBeenCalledWith(405);
   });
 });

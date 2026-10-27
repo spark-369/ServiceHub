@@ -150,8 +150,10 @@ src/
 ```
 tests/
 ├── api/                            # Route-handler tests
+├── e2e/                            # Full API journey tests
 ├── lib/                            # Unit tests for lib modules
-└── utils/test-utils.ts             # Shared fixtures & mock helpers
+├── proxy/                          # Global proxy (headers/CORS/rate limit) tests
+└── utils/                          # Shared fixtures, helpers & Prisma fake
 ```
 
 
@@ -357,10 +359,50 @@ npm run test:ci
 
 Tests live in `tests/` and are grouped by concern:
 
+- `tests/e2e/` — end-to-end API flow tests. These run the REAL route handlers,
+  REAL auth (`withAuth`/`withRole`, JWT sign/verify, bcrypt) and the in-memory
+  Prisma fake — no per-test mocks of auth/middleware/next-server. They walk full
+  user journeys (register → login → book → review → admin) plus the guard
+  negative paths (401/403/404).
 - `tests/api/` — route-handler tests (auth, admin, services, bookings,
-  recommendations, payments …) using Supertest against mocked Prisma.
-- `tests/lib/` — unit tests for library modules.
-- `tests/utils/test-utils.ts` — shared fixtures and mock helpers.
+  recommendations, payments, health probes …) using the shared request/response
+  helpers.
+- `tests/proxy/` — unit tests for the global proxy (`src/proxy.ts`): security
+  headers, request-id correlation, per-IP rate limiting (default, auth-stricter
+  and env-configured limits), exempt routes, 429 handling and CORS pre-flight
+  with an allow-list.
+- `tests/lib/` — unit tests for library modules (auth, pagination, errors,
+  rate limiter, validated env config, logger, format helpers).
+- `tests/utils/test-utils.ts` — shared fixtures, request builders and response
+  readers (`createRequest`, `createAuthedRequest`, `jsonOf`, `statusOf`).
+- `tests/utils/prisma-fake.ts` — the deterministic in-memory Prisma fake
+  installed globally by `jest.setup.js`, so route handlers exercise real
+  filtering/pagination/aggregation against realistic seeded data.
+
+The Jest harness (`jest.setup.js`) installs a hybrid `next/server` mock and the
+in-memory Prisma fake globally, and clears the DB between tests.
+
+Targeted runs are available for each layer:
+
+```bash
+npm run test:api          # API route handlers
+npm run test:lib          # library modules
+npm run test:proxy        # global proxy / middleware
+npm run test:e2e          # full API journeys
+```
+
+### Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and on all pull
+requests. The suite is fully hermetic (in-memory Prisma fake, mocked Redis /
+Stripe / AI), so CI needs no service containers. Each run executes:
+
+1. `npm ci` (+ Prisma client generation)
+2. `npm run lint`
+3. `npm run test:ci` — single Jest run with coverage; the 70% global coverage
+   gates configured in `jest.config.js` fail the build on regression.
+
+The coverage report is uploaded as a CI artifact for inspection.
 
 ### Linting
 
@@ -424,6 +466,7 @@ docker compose up -d db redis
 | Docker     | Containerization               |
 | Kubernetes | Orchestration (health probes)  |
 | Jest       | Testing framework              |
+| GitHub Actions | CI (lint, tests, coverage gates) |
 | ESLint     | Linting                        |
 | Supertest  | HTTP route-handler assertions  |
 

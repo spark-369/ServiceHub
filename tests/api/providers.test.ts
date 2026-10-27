@@ -4,6 +4,16 @@ import { prisma } from '@/lib/db/prisma';
 
 jest.mock('@/lib/db/prisma');
 
+// The route exports `GET = withAuth(handler)` and `POST = withRole(['admin'])`.
+// Supply real pass-throughs so both wrapped handlers are callable directly.
+// Requests built with `createMockRequest` have no authorization header, so
+// `getUserFromRequest` resolves to null and `withAuth` lets the handler run
+// unauthenticated — the assertions below target the query the handler builds.
+jest.mock('@/middleware/auth', () => ({
+  withAuth: (handler: any) => handler,
+  withRole: (_roles: string[]) => (handler: any) => handler,
+}));
+
 describe('Providers API Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -34,6 +44,7 @@ describe('Providers API Tests', () => {
           email: true,
           phone: true,
           address: true,
+          role: true,
           isVerified: true,
           createdAt: true,
           _count: {

@@ -1,12 +1,19 @@
 import { GET as ServicesGET, POST as ServicesPOST } from '@/app/api/services/route';
 import { createMockRequest, createMockResponse, createMockService, createMockUser } from '../utils/test-utils';
 import { prisma } from '@/lib/db/prisma';
-import { withRole } from '@/middleware/auth';
 import { recommendServices } from '@/lib/integrations/ai';
 
 jest.mock('@/lib/db/prisma');
-jest.mock('@/middleware/auth');
 jest.mock('@/lib/integrations/ai');
+
+// The route exports `POST = withRole([...])(handler)`. Return a function that
+// invokes the handler with a fake authenticated provider, so the wrapped handler
+// is callable directly with a real `user` (matching `providerId: 'provider123'`).
+jest.mock('@/middleware/auth', () => ({
+  withAuth: (handler: any) => handler,
+  withRole: (_roles: string[]) => (handler: any) => (request: any) =>
+    handler(request, { userId: 'provider123', email: 'provider@example.com', role: 'provider' }),
+}));
 
 describe('Services API Tests', () => {
   beforeEach(() => {
@@ -15,7 +22,16 @@ describe('Services API Tests', () => {
 
   describe('GET /api/services', () => {
     it('should return services with basic filtering', async () => {
-      const mockServices = [createMockService()];
+      const mockServices = [
+        createMockService({
+          provider: {
+            id: 'provider123',
+            name: 'Test Provider',
+            email: 'provider@example.com',
+            phone: '555-0100',
+          },
+        }),
+      ];
       (prisma.service.findMany as jest.Mock).mockResolvedValue(mockServices);
       (prisma.service.count as jest.Mock).mockResolvedValue(1);
 
@@ -212,8 +228,12 @@ describe('Services API Tests', () => {
 
   describe('POST /api/services', () => {
     it('should create service successfully with valid data', async () => {
-      const mockService = createMockService();
-      (prisma.service.create as jest.Mock).mockResolvedValue(mockService);
+      // Echo the inserted row back the way a real database would, so the
+      // response reflects the submitted payload (including `availability`)
+      // rather than an unrelated canned fixture.
+      (prisma.service.create as jest.Mock).mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 'service123', ...data })
+      );
 
       const request = createMockRequest({
         method: 'POST',

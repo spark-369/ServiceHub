@@ -6,6 +6,14 @@ import { recommendServices } from '@/lib/integrations/ai';
 jest.mock('@/lib/db/prisma');
 jest.mock('@/lib/integrations/ai');
 
+// The route exports `GET = withAuth(handler)`. Supply a real pass-through so the
+// wrapped handler is a callable function we can invoke directly. Requests built
+// with `createMockRequest` have no authorization header, so `getUserFromRequest`
+// resolves to null and the guard lets the handler run unauthenticated.
+jest.mock('@/middleware/auth', () => ({
+  withAuth: (handler: any) => handler,
+}));
+
 describe('Recommendations API Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -66,11 +74,12 @@ describe('Recommendations API Tests', () => {
           provider: {
             select: {
               name: true,
-              email: true,
+              phone: true,
             },
           },
         },
         orderBy: [{ rating: 'desc' }, { reviewCount: 'desc' }],
+        take: 100,
       });
 
       expect(result.json).toHaveBeenCalledWith({
@@ -136,6 +145,7 @@ describe('Recommendations API Tests', () => {
         },
         include: expect.any(Object),
         orderBy: expect.any(Object),
+        take: 100,
       });
     });
 

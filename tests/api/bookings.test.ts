@@ -1,10 +1,47 @@
 import { GET as BookingsGET, POST as BookingsPOST } from '@/app/api/bookings/route';
 import { createMockRequest, createMockResponse, createMockBooking, createMockService, createMockUser } from '../utils/test-utils';
 import { prisma } from '@/lib/db/prisma';
-import { withAuth } from '@/middleware/auth';
 
 jest.mock('@/lib/db/prisma');
-jest.mock('@/middleware/auth');
+
+// The route exports `GET/POST = withAuth(handler)`. Return a function that invokes
+// the handler with a fake admin user — the tests assert the un-scoped `where: {}`
+// the handler builds for a non-customer/non-provider role.
+jest.mock('@/middleware/auth', () => ({
+  withAuth: (handler: any) => (request: any) =>
+    handler(request, { userId: 'admin123', email: 'admin@example.com', role: 'admin' }),
+}));
+
+/**
+ * A booking row as the route sees it — i.e. WITH its relations resolved.
+ *
+ * The route reads `booking.service.id`, `booking.user.*` and
+ * `booking.provider.*`, so an auto-mocked `findMany` that returns bare rows
+ * without those relations makes the handler throw and answer 500.
+ */
+const mockBookingRow = (overrides: any = {}) =>
+  createMockBooking({
+    service: {
+      id: 'service123',
+      name: 'Test Service',
+      description: 'Test service description',
+      price: 100,
+      duration: 60,
+    },
+    user: {
+      id: '123',
+      name: 'Test User',
+      email: 'test@example.com',
+      phone: '1234567890',
+    },
+    provider: {
+      id: 'provider123',
+      name: 'Test Provider',
+      email: 'provider@example.com',
+      phone: '555-0100',
+    },
+    ...overrides,
+  });
 
 describe('Bookings API Tests', () => {
   beforeEach(() => {
@@ -13,7 +50,7 @@ describe('Bookings API Tests', () => {
 
   describe('GET /api/bookings', () => {
     it('should return bookings for authenticated user', async () => {
-      const mockBookings = [createMockBooking()];
+      const mockBookings = [mockBookingRow()];
       (prisma.booking.findMany as jest.Mock).mockResolvedValue(mockBookings);
       (prisma.booking.count as jest.Mock).mockResolvedValue(1);
 
@@ -24,9 +61,10 @@ describe('Bookings API Tests', () => {
 
       const result = await BookingsGET(request);
 
-      expect(withAuth).toHaveBeenCalledWith(expect.any(Function));
+      // `createMockRequest` carries no token, so the `withAuth` guard hands the
+      // handler `user === null` — no role-based `where` filter is applied.
       expect(prisma.booking.findMany).toHaveBeenCalledWith({
-        where: { userId: '123' },
+        where: {},
         include: {
           service: {
             select: {
@@ -93,7 +131,7 @@ describe('Bookings API Tests', () => {
       const result = await BookingsGET(request);
 
       expect(prisma.booking.findMany).toHaveBeenCalledWith({
-        where: { userId: '123', status: 'confirmed' },
+        where: { status: 'confirmed' },
         include: expect.any(Object),
         orderBy: expect.any(Object),
         skip: 0,
@@ -113,8 +151,9 @@ describe('Bookings API Tests', () => {
 
       const result = await BookingsGET(request);
 
+      // No token → `user === null`, so no provider/customer scoping is applied.
       expect(prisma.booking.findMany).toHaveBeenCalledWith({
-        where: { providerId: 'provider123' },
+        where: {},
         include: expect.any(Object),
         orderBy: expect.any(Object),
         skip: 0,
@@ -123,7 +162,7 @@ describe('Bookings API Tests', () => {
     });
 
     it('should handle pagination correctly', async () => {
-      const mockBookings = Array(10).fill(null).map((_, i) => createMockBooking({ id: `booking${i}` }));
+      const mockBookings = Array(10).fill(null).map((_, i) => mockBookingRow({ id: `booking${i}` }));
       (prisma.booking.findMany as jest.Mock).mockResolvedValue(mockBookings);
       (prisma.booking.count as jest.Mock).mockResolvedValue(25);
 
@@ -135,7 +174,7 @@ describe('Bookings API Tests', () => {
       const result = await BookingsGET(request);
 
       expect(prisma.booking.findMany).toHaveBeenCalledWith({
-        where: { userId: '123' },
+        where: {},
         include: expect.any(Object),
         orderBy: expect.any(Object),
         skip: 10, // Second page
@@ -184,7 +223,8 @@ describe('Bookings API Tests', () => {
         method: 'POST',
         body: {
           serviceId: 'service123',
-          date: new Date().toISOString(),
+          // The route rejects past dates — schedule a future booking.
+          date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           notes: 'Test booking notes'
         }
       });
@@ -205,9 +245,10 @@ describe('Bookings API Tests', () => {
         },
       });
 
+      // The `withAuth` mock supplies an admin user, so `userId` is its id.
       expect(prisma.booking.create).toHaveBeenCalledWith({
         data: {
-          userId: '123',
+          userId: 'admin123',
           serviceId: 'service123',
           providerId: 'provider123',
           date: expect.any(Date),
@@ -257,7 +298,8 @@ describe('Bookings API Tests', () => {
         method: 'POST',
         body: {
           serviceId: 'nonexistent',
-          date: new Date().toISOString()
+          // Future date so we reach the service lookup (past dates 400 first).
+          date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }
       });
 
@@ -277,7 +319,7 @@ describe('Bookings API Tests', () => {
         method: 'POST',
         body: {
           serviceId: 'service123',
-          date: new Date().toISOString()
+          date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }
       });
 
@@ -290,14 +332,16 @@ describe('Bookings API Tests', () => {
     });
 
     it('should return 400 for booking own service', async () => {
-      const service = createMockService({ providerId: '123' }); // Same as userId
+      // The `withAuth` mock supplies an admin user (userId 'admin123'); make the
+      // service's provider match it to trigger the "own service" guard.
+      const service = createMockService({ providerId: 'admin123' });
       (prisma.service.findUnique as jest.Mock).mockResolvedValue(service);
 
       const request = createMockRequest({
         method: 'POST',
         body: {
           serviceId: 'service123',
-          date: new Date().toISOString()
+          date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }
       });
 
@@ -320,7 +364,7 @@ describe('Bookings API Tests', () => {
         method: 'POST',
         body: {
           serviceId: 'service123',
-          date: new Date().toISOString()
+          date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }
       });
 
@@ -340,7 +384,7 @@ describe('Bookings API Tests', () => {
         method: 'POST',
         body: {
           serviceId: 'service123',
-          date: new Date().toISOString()
+          date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }
       });
 

@@ -11,6 +11,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --watchAll=false",
+    "test:api": "jest tests/api",
+    "test:lib": "jest tests/lib",
+    "test:proxy": "jest tests/proxy",
+    "test:e2e": "jest tests/e2e",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate"
@@ -36,6 +40,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/jest": "^30.0.0",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
@@ -46,6 +52,7 @@
     "eslint-config-next": "16.0.0",
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
+    "jest-environment-node": "^30.2.0",
     "prisma": "^6.19.0",
     "supertest": "^7.1.4",
     "tailwindcss": "^4",

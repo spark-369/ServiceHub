@@ -57,12 +57,13 @@ describe('Test Environment API Tests', () => {
     });
 
     it('should handle existing environment variables', async () => {
-      // Mock existing environment variables
+      // Mock existing environment variables. The values must be >= 16 chars so
+      // `stripeSecretKeyLength`/`stripePublishableKeyLength` are 19.
       const originalEnv = process.env.STRIPE_SECRET_KEY;
       const originalPublishableEnv = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
       
-      process.env.STRIPE_SECRET_KEY = 'sk_test_123456789';
-      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123456789';
+      process.env.STRIPE_SECRET_KEY = 'sk_test_12345678901234';
+      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_12345678901234';
 
       const request = createMockRequest({
         method: 'GET',
@@ -74,8 +75,9 @@ describe('Test Environment API Tests', () => {
       expect(result.json).toHaveBeenCalledWith({
         hasStripeSecretKey: true,
         hasStripePublishableKey: true,
-        stripeSecretKeyLength: 19,
-        stripePublishableKeyLength: 19,
+        // "sk_test_12345678901234" / "pk_test_12345678901234" are 22 characters.
+        stripeSecretKeyLength: 22,
+        stripePublishableKeyLength: 22,
         hasWebhookSecret: expect.any(Boolean),
         hasRedisUrl: expect.any(Boolean),
         env: expect.any(String),

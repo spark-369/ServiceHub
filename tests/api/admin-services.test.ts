@@ -16,9 +16,12 @@ describe('Admin Services API Tests', () => {
       const mockService = createMockService();
       const mockServices = [mockService];
       
-      (prisma.service.findMany as jest.Mock).mockResolvedValue(mockServices);
+      (prisma.service.findMany as jest.Mock)
+        // First call: the paginated listing. Second call: the distinct-category
+        // query (`select: { category: true }, distinct: ['category']`).
+        .mockResolvedValueOnce(mockServices)
+        .mockResolvedValueOnce([{ category: 'cleaning' }]);
       (prisma.service.count as jest.Mock).mockResolvedValue(1);
-      (prisma.service.findMany as jest.Mock).mockResolvedValue([{ category: 'cleaning' }]);
 
       // Mock admin user
       const mockAdminUser = { userId: 'admin123', email: 'admin@example.com', role: 'admin' };
@@ -74,9 +77,10 @@ describe('Admin Services API Tests', () => {
 
     it('should filter services by category', async () => {
       const mockServices = [createMockService({ category: 'plumbing' })];
-      (prisma.service.findMany as jest.Mock).mockResolvedValue(mockServices);
+      (prisma.service.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockServices)
+        .mockResolvedValueOnce([{ category: 'plumbing' }]);
       (prisma.service.count as jest.Mock).mockResolvedValue(1);
-      (prisma.service.findMany as jest.Mock).mockResolvedValue([{ category: 'plumbing' }]);
 
       // Mock admin user
       const mockAdminUser = { userId: 'admin123', email: 'admin@example.com', role: 'admin' };
@@ -102,9 +106,10 @@ describe('Admin Services API Tests', () => {
 
     it('should search services by name or description', async () => {
       const mockServices = [createMockService({ name: 'Premium Cleaning' })];
-      (prisma.service.findMany as jest.Mock).mockResolvedValue(mockServices);
+      (prisma.service.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockServices)
+        .mockResolvedValueOnce([{ category: 'cleaning' }]);
       (prisma.service.count as jest.Mock).mockResolvedValue(1);
-      (prisma.service.findMany as jest.Mock).mockResolvedValue([{ category: 'cleaning' }]);
 
       // Mock admin user
       const mockAdminUser = { userId: 'admin123', email: 'admin@example.com', role: 'admin' };
@@ -133,9 +138,10 @@ describe('Admin Services API Tests', () => {
 
     it('should filter services by active status', async () => {
       const mockServices = [createMockService({ isActive: false })];
-      (prisma.service.findMany as jest.Mock).mockResolvedValue(mockServices);
+      (prisma.service.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockServices)
+        .mockResolvedValueOnce([{ category: 'cleaning' }]);
       (prisma.service.count as jest.Mock).mockResolvedValue(1);
-      (prisma.service.findMany as jest.Mock).mockResolvedValue([{ category: 'cleaning' }]);
 
       // Mock admin user
       const mockAdminUser = { userId: 'admin123', email: 'admin@example.com', role: 'admin' };

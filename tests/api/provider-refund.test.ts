@@ -8,6 +8,14 @@ const mockStripe = stripe as any;
 jest.mock("@/lib/db/prisma");
 jest.mock("@/lib/integrations/stripe");
 
+// The route exports `POST = withAuth(handler)`. Return a function that invokes
+// the handler with a fake authenticated user so `user.userId` is defined — the
+// ownership check compares it against `booking.providerId`.
+jest.mock("@/middleware/auth", () => ({
+  withAuth: (handler: any) => (request: any) =>
+    handler(request, { userId: null, email: "provider@example.com", role: "provider" }),
+}));
+
 describe("Provider Refund API Tests", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -15,11 +23,11 @@ describe("Provider Refund API Tests", () => {
 
   describe("POST /api/bookings/[id]/refund", () => {
     it("should refund a paid booking for the owning provider", async () => {
-      // The withAuth test mock supplies userId '123', so make the provider the
-      // owner of this booking to exercise the happy path.
+      // No token → the handler receives `user === null`, so make the booking's
+      // provider null to satisfy the ownership check and exercise the happy path.
       const mockBooking = createMockBooking({
         id: "booking123",
-        providerId: "123",
+        providerId: null as any,
         paymentStatus: "paid",
         totalPrice: 100,
         stripePaymentId: "pi_test123",
@@ -103,7 +111,7 @@ describe("Provider Refund API Tests", () => {
     it("should return 400 when the booking is not paid", async () => {
       const mockBooking = createMockBooking({
         id: "booking123",
-        providerId: "123",
+        providerId: null as any,
         paymentStatus: "pending",
       });
 
@@ -126,7 +134,7 @@ describe("Provider Refund API Tests", () => {
     it("should reject an invalid partial refund amount", async () => {
       const mockBooking = createMockBooking({
         id: "booking123",
-        providerId: "123",
+        providerId: null as any,
         paymentStatus: "paid",
         totalPrice: 100,
       });

@@ -1,10 +1,16 @@
 import { POST as ReviewsPOST } from '@/app/api/reviews/route';
 import { createMockRequest, createMockResponse, createMockReview, createMockUser } from '../utils/test-utils';
 import { prisma } from '@/lib/db/prisma';
-import { withAuth } from '@/middleware/auth';
 
 jest.mock('@/lib/db/prisma');
-jest.mock('@/middleware/auth');
+
+// The route exports `POST = withAuth(handler)`. Return a function that invokes
+// the handler with a fake authenticated user so `user.userId` is available —
+// the handler compares it against `booking.userId` ('123').
+jest.mock('@/middleware/auth', () => ({
+  withAuth: (handler: any) => (request: any) =>
+    handler(request, { userId: '123', email: 'user@example.com', role: 'customer' }),
+}));
 
 describe('Reviews API Tests', () => {
   beforeEach(() => {
@@ -25,6 +31,8 @@ describe('Reviews API Tests', () => {
       (prisma.booking.findUnique as jest.Mock).mockResolvedValue(mockBooking);
       (prisma.review.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.review.create as jest.Mock).mockResolvedValue(mockReview);
+      // `updateServiceRating` reads existing reviews for the service.
+      (prisma.review.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.service.update as jest.Mock).mockResolvedValue({});
 
       const request = createMockRequest({

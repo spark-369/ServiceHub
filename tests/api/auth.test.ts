@@ -2,7 +2,7 @@ import { POST } from '@/app/api/auth/login/route';
 import { POST as RegisterPOST } from '@/app/api/auth/register/route';
 import { createMockRequest, createMockResponse, createMockUser } from '../utils/test-utils';
 import { prisma } from '@/lib/db/prisma';
-import { comparePassword, generateToken } from '@/lib/auth';
+import { comparePassword, generateToken, hashPassword } from '@/lib/auth';
 
 jest.mock('@/lib/db/prisma');
 jest.mock('@/lib/auth');
@@ -149,6 +149,9 @@ describe('Auth API Tests', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.user.create as jest.Mock).mockResolvedValue(mockUser);
       (generateToken as jest.Mock).mockReturnValue(mockToken);
+      // The route hashes the password before `user.create`; stub it so the
+      // stored value is a known (non-undefined) string.
+      (hashPassword as jest.Mock).mockReturnValue('hashed_password');
 
       const request = createMockRequest({
         method: 'POST',
@@ -172,7 +175,7 @@ describe('Auth API Tests', () => {
         data: {
           name: 'Test User',
           email: 'test@example.com',
-          password: expect.any(String), // hashed password
+          password: 'hashed_password',
           phone: '1234567890',
           address: '123 Test St',
           role: 'customer'
